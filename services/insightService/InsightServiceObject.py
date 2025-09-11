@@ -1,5 +1,6 @@
 from ..githubService.GithubServiceObject import gb_service
 from ...dto.insightDTO import DailyInsightDTO
+from ...dto.gitServiceDTO import CodebaseDTO, CodeFileDTO
 
 from datetime import datetime
 
@@ -31,7 +32,15 @@ class InsightService:
         """
 
         if not 'current scope code base exists in postgre':
-            self.gb_service.getCodebaseDto() 
+            self.gb_service.getCodebaseDto()
+        something = CodebaseDTO()
+        files = something.files # List[CodeFileDTO]
+        for file in files:
+            file.code_content
+            file.last_modified_at
+            file.path  # this includes filename
+
+        
 
 
 
