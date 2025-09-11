@@ -1,10 +1,12 @@
+from ..githubService.GithubServiceObject import gb_service
+
 class InsightService:
     def __init__(self):
         '''
         Set github url, api, path
         Load keys from env
-        ''' 
-        pass
+        '''
+        self.gb_service = gb_service #Singleton Github Service Class.
 
 
 
@@ -14,4 +16,4 @@ class InsightService:
 
 
 # Singleton instance
-gb_service = InsightService()
+insight_service = InsightService()
