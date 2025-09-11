@@ -8,11 +8,17 @@ from datetime import datetime
 # Update only when changes to InsightService require it.
 # Do not modify this class without prior team discussion.
 
-class InsightDTO(BaseModel):
+class DailyInsightDTO(BaseModel):
     '''
     DTO Class for transfering data of a Insight
     '''
-    user_id : int # Id given by our service.
+    commitary_id : int # Id given by our service.
     github_id : int # Id given by the github.
-    
+    repo_id : int # 
+    repo_name : str #
+    branch_name : str | None # Baseline branch for comparison.
+    insight:str # Insight created by LLM
+
+
+
 
