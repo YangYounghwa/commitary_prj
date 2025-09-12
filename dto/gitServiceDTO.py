@@ -8,7 +8,7 @@ from datetime import datetime
 
 class RepoDTO(BaseModel):
     '''
-    DTO Class for transfering data of a Repository
+    DTO Class for transfering data of a Repository.ㅔㅛ
     '''
     github_id : int  # id of github repository
     github_node_id: str | None # Node id for GraphQL
