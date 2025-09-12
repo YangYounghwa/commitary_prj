@@ -2,7 +2,7 @@ import os
 from time import sleep
 from pydantic import ValidationError
 import requests
-from dto.gitServiceDTO import RepoDTO,RepoListDTO,BranchDTO,BranchListDTO,UserGBInfoDTO,CommitListDTO,CommitMDDTO
+from dto.gitServiceDTO import RepoDTO, RepoListDTO, BranchDTO, BranchListDTO, UserGBInfoDTO, CommitListDTO, CommitMDDTO
 from dto.gitServiceDTO import PatchFileDTO, DiffDTO
 from dto.gitServiceDTO import CodeFileDTO, CodebaseDTO
 from typing import List, Dict
@@ -59,7 +59,13 @@ class GithubService:
         # 성공 응답을 JSON으로 반환합니다.
         return response.json()
 
-
+    def getUserMetadata(self,user:str,token:str)->UserGBInfoDTO:
+        # TODO : get user data for github.
+        # name, github name, github_id 
+        
+        # email is optional. 
+         
+        return
 
     def getRepos(self,user:str,token:str,commitary_id:int)-> RepoListDTO:
 
@@ -144,6 +150,9 @@ class GithubService:
         
         return CommitListDTO(commitList=commit_list)
 
+    def getDiffByTime(self,user:str,token:str,owner:str,repo:str,branchBefore:str, brancheAfter:str,beforeDatetime:datetime, afterDatetime:datetime)->DiffDTO:
+        # TODO : add getDIffByTime  choose two commits by time.
+        return
 
     def getDiffBySHA(self, user: str, token: str, owner: str, repo: str, shaBefore: str, shaAfter: str) -> DiffDTO:
         '''
@@ -183,8 +192,7 @@ class GithubService:
         This logic is refactored from the team lead's AI-generated example.
         """
         # 특정 브랜치나 커밋 시점의 모든 파일 경로와 내용을 가져오는 GraphQL 쿼리입니다.
-        TREE_QUERY = 
-        """
+        TREE_QUERY = """
         query GetRepositoryTree($owner: String!, $name: String!, $expression: String!) {
           repository(owner: $owner, name: $name) {
             object(expression: $expression) {
