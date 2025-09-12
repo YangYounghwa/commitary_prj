@@ -21,6 +21,7 @@ class GithubService:
         Set github url, api, path
         Load keys from env
         ''' 
+
         # --- 추가된 부분 ---
         # REST API와 GraphQL API 요청을 위한 기본 URL을 설정합니다.
         self.api_base_url = "https://api.github.com"
@@ -58,7 +59,10 @@ class GithubService:
         # 성공 응답을 JSON으로 반환합니다.
         return response.json()
 
-    def getRepos(self, user: str, token: str) -> RepoListDTO:
+
+
+    def getRepos(self,user:str,token:str,commitary_id:int)-> RepoListDTO:
+
         '''
         Returns list of repositories the authenticated user has access to.
         '''
@@ -66,6 +70,7 @@ class GithubService:
         # '/user/repos' 엔드포인트를 호출하여 사용자에게 속한(소유자 또는 협력자) 레포지토리 목록을 가져옵니다.
         repos_data = self._make_request("GET", "/user/repos", token, params={"affiliation": "owner,collaborator"})
         
+
         # API 응답으로 받은 각 레포지토리 데이터를 RepoDTO 형식에 맞게 변환합니다. (List Comprehension 사용)
         repo_list = [RepoDTO(
             github_id=repo['id'],
@@ -89,6 +94,7 @@ class GithubService:
         # --- 수정된 부분 ---
         # 특정 레포지토리의 브랜치 목록을 가져오는 API를 호출합니다.
         branches_data = self._make_request("GET", f"/repos/{owner}/{repo}/branches", token)
+
         
         branch_list = []
         # 각 브랜치의 마지막 커밋 정보를 얻기 위해 반복합니다. (최종 수정 시간을 확인하기 위함)
@@ -138,6 +144,7 @@ class GithubService:
         
         return CommitListDTO(commitList=commit_list)
 
+
     def getDiffBySHA(self, user: str, token: str, owner: str, repo: str, shaBefore: str, shaAfter: str) -> DiffDTO:
         '''
         Difference between two commits by two SHAs.
@@ -145,6 +152,7 @@ class GithubService:
         # --- 수정된 부분 ---
         # 두 커밋 SHA 사이의 차이점을 비교하는 API를 호출합니다.
         diff_data = self._make_request("GET", f"/repos/{owner}/{repo}/compare/{shaBefore}...{shaAfter}", token)
+
         
         # 응답에 포함된 각 파일의 변경사항(patch)을 PatchFileDTO 형식으로 변환합니다.
         files = [PatchFileDTO(
@@ -175,7 +183,8 @@ class GithubService:
         This logic is refactored from the team lead's AI-generated example.
         """
         # 특정 브랜치나 커밋 시점의 모든 파일 경로와 내용을 가져오는 GraphQL 쿼리입니다.
-        TREE_QUERY = """
+        TREE_QUERY = 
+        """
         query GetRepositoryTree($owner: String!, $name: String!, $expression: String!) {
           repository(owner: $owner, name: $name) {
             object(expression: $expression) {
