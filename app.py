@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify, request, redirect, url_for, session, render_template
 from dotenv import load_dotenv
 
-from .services.githubService.GithubServiceObject import gb_service
+from services.githubService.GithubServiceObject import gb_service
 
 import psycopg2
 
