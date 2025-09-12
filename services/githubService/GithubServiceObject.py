@@ -146,6 +146,7 @@ class GithubService:
             return commits_data[0]['sha']
         return None
 
+    
     def getDiffByTime(self, user: str, token: str, owner: str, repo: str, branch: str, beforeDatetime: datetime, afterDatetime: datetime) -> DiffDTO | None:
         """
         Difference between two points in time on a given branch.

@@ -40,7 +40,8 @@ class UserGBInfoDTO(BaseModel):
     github_id: int = Field(..., description="GitHub-defined user ID (Foreign Key).")
     github_username: str = Field(..., description="Username of the github account.")
     github_avatar_url : str # <- ADDED
-
+    github_url : str # <-ADDED 20250913
+    github_html_url : str # ADDED 20250913
 
 
 class BranchDTO(BaseModel):

@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 from typing import List, Dict
 from datetime import date, datetime
 
-from transformers import Any
 
 # Data Transfer Object (DTO) for return values of InsightService.
 # Update only when changes to InsightService require it.
