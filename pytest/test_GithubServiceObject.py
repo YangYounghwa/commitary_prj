@@ -24,9 +24,10 @@ def check_github():
 def test_getUserMEtadata():
     
     userMetadata = gb.getUserMetadata("YangYounghwa",GITHUB_TOKEN)
+    print(userMetadata)
+    
     assert userMetadata.name is not None
     assert userMetadata.github_id is not None
     assert userMetadata.github_username is not None
-    print(userMetadata)
     
      
