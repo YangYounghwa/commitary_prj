@@ -33,7 +33,7 @@ class UserGBInfoDTO(BaseModel):
     Retrieve data from github.
     Find user from the RDB. If not found fill this with github api(/user) and save in the the DB.
     """
-    id: int = Field(..., description="Internal database ID for the user.")
+    # commitary_id: int = Field(..., description="Internal database ID for the user.")
     name: str = Field(..., description="User's display name, defaults to github_username.")
     emailList: List[str] | None = Field(..., description="List of user's emails.")
     defaultEmail: str | None = Field(..., description="The user's primary email.")

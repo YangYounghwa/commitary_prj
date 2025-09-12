@@ -29,7 +29,7 @@ class GithubService:
         ''' 
         1+1; 
 
-    def getRepos(self,user:str,token:str)-> RepoListDTO:
+    def getRepos(self,user:str,token:str,commitary_id:int)-> RepoListDTO:
         '''
         returns list of repository
         user is contributor or owner of the repository.
@@ -48,7 +48,7 @@ class GithubService:
         repolist = RepoListDTO(repoList=[repoOne])
         return repolist
 
-    def getBranches(self,user:str,token:str,repo:str)-> BranchListDTO:
+    def getBranches(self,user:str,token:str,repo:str,commitary_id:int)-> BranchListDTO:
         
         # Example of a return value 
         brOne = BranchDTO(repo_id = 123)
@@ -56,7 +56,7 @@ class GithubService:
         return brList
 
 
-    def getCommitMsgs(user,token,branch,startdatetime,enddatetime)->CommitListDTO:
+    def getCommitMsgs(user,token,branch,startdatetime,enddatetime,commitary_id:int)->CommitListDTO:
 
         commit1 = CommitMDDTO()
         commit2 = CommitMDDTO()
@@ -66,7 +66,7 @@ class GithubService:
 
 
 
-    def getDiffByTime(user,token,branchBefore, branchAfter,beforeDatetime:datetime, Afterenddatetime:datetime)->DiffDTO:
+    def getDiffByTime(user,token,branchBefore, branchAfter,beforeDatetime:datetime, Afterenddatetime:datetime,commitary_id:int)->DiffDTO:
 
         # Example of a return value.
         patch_dict = {
@@ -92,17 +92,17 @@ class GithubService:
     
 
 
-    def getDiffBySHA(user,token,shaBefore,shaAfter)->DiffDTO:
+    def getDiffBySHA(user,token,shaBefore,shaAfter,commitary_id:int)->DiffDTO:
         '''
         Difference between two commits by two SHAs.
         '''
 
         return
     
-    def getSnapshotByTime(user,token,branch,datetime)->CodebaseDTO:
+    def getSnapshotByTime(user,token,branch,datetime,commitary_id:int)->CodebaseDTO:
         return
 
-    def getSnapshotBySHA(user,token,branch,sha)->CodebaseDTO:
+    def getSnapshotBySHA(user,token,branch,sha,commitary_id:int)->CodebaseDTO:
         return
     
 
@@ -119,7 +119,7 @@ class GithubService:
 # by querying the history of that path.
 
     
-    def get_codebase_dto(owner: str, repo_name: str, token: str, branch: str = "main") -> CodebaseDTO:
+    def getCodebaseDto(owner: str, repo_name: str, token: str, branch: str = "main") -> CodebaseDTO:
 
         """
         Retrieves the codebase from a GitHub repository, parses it, and returns a CodebaseDTO.
