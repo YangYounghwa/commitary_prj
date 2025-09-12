@@ -2,7 +2,7 @@ import os
 from time import sleep
 from pydantic import ValidationError
 import requests
-from dto.gitServiceDTO import RepoDTO,RepoListDTO,BranchDTO,BranchListDTO,UserGBInfoDTO,CommitListDTO,CommitMDDTO
+from dto.gitServiceDTO import RepoDTO, RepoListDTO, BranchDTO, BranchListDTO, UserGBInfoDTO, CommitListDTO, CommitMDDTO
 from dto.gitServiceDTO import PatchFileDTO, DiffDTO
 from dto.gitServiceDTO import CodeFileDTO, CodebaseDTO
 from typing import List, Dict
@@ -19,6 +19,8 @@ class GithubService:
         Set github url, api, path
         Load keys from env
         ''' 
+        # --- 추가된 부분 ---
+        # REST API와 GraphQL API 요청을 위한 기본 URL을 설정합니다.
         self.api_base_url = "https://api.github.com"
         self.graphql_url = "https://api.github.com/graphql"
 
@@ -43,12 +45,22 @@ class GithubService:
         response.raise_for_status()
         return response.json()
 
-    def getRepos(self, user: str, token: str) -> RepoListDTO:
+    def getUserMetadata(self,user:str,token:str)->UserGBInfoDTO:
+        # TODO : get user data for github.
+        # name, github name, github_id 
+        
+        # email is optional. 
+         
+        return
+
+    def getRepos(self,user:str,token:str,commitary_id:int)-> RepoListDTO:
+
         '''
         Returns list of repositories the authenticated user has access to.
         '''
         repos_data = self._make_request("GET", "/user/repos", token, params={"affiliation": "owner,collaborator"})
         
+        # API 응답으로 받은 각 레포지토리 데이터를 RepoDTO 형식에 맞게 변환합니다. (List Comprehension 사용)
         repo_list = [RepoDTO(
             github_id=repo['id'],
             github_node_id=repo['node_id'],
@@ -68,6 +80,7 @@ class GithubService:
         Returns list of branches for a given repository.
         '''
         branches_data = self._make_request("GET", f"/repos/{owner}/{repo}/branches", token)
+
         
         branch_list = []
         for branch in branches_data:
@@ -110,11 +123,16 @@ class GithubService:
         
         return CommitListDTO(commitList=commit_list)
 
+    def getDiffByTime(self,user:str,token:str,owner:str,repo:str,branchBefore:str, brancheAfter:str,beforeDatetime:datetime, afterDatetime:datetime)->DiffDTO:
+        # TODO : add getDIffByTime  choose two commits by time.
+        return
+
     def getDiffBySHA(self, user: str, token: str, owner: str, repo: str, shaBefore: str, shaAfter: str) -> DiffDTO:
         '''
         Difference between two commits by two SHAs.
         '''
         diff_data = self._make_request("GET", f"/repos/{owner}/{repo}/compare/{shaBefore}...{shaAfter}", token)
+
         
         files = [PatchFileDTO(
             filename=file['filename'],
