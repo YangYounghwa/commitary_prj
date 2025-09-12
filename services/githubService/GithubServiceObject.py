@@ -130,9 +130,49 @@ class GithubService:
         
         return CommitListDTO(commitList=commit_list)
 
-    def getDiffByTime(self,user:str,token:str,owner:str,repo:str,branchBefore:str, brancheAfter:str,beforeDatetime:datetime, afterDatetime:datetime)->DiffDTO:
-        # TODO : add getDIffByTime  choose two commits by time.
-        return
+    def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> str | None:
+        """Helper function to find the latest commit SHA on a branch before a specific datetime."""
+        params = {
+            "sha": branch,
+            "until": target_datetime.isoformat(),
+            "per_page": 1
+        }
+        commits_data = self._make_request("GET", f"/repos/{owner}/{repo}/commits", token, params=params)
+
+        if commits_data:
+            return commits_data[0]['sha']
+        return None
+
+    def getDiffByTime(self, user: str, token: str, owner: str, repo: str, branch: str, beforeDatetime: datetime, afterDatetime: datetime) -> DiffDTO | None:
+        """
+        Difference between two points in time on a given branch.
+        Finds the latest commits before 'beforeDatetime' and 'afterDatetime' and compares them.
+        """
+        # 1. 각 시간에 해당하는 커밋의 SHA 값을 헬퍼 함수를 이용해 찾습니다.
+        shaBefore = self._get_sha_by_datetime(token, owner, repo, branch, beforeDatetime)
+        shaAfter = self._get_sha_by_datetime(token, owner, repo, branch, afterDatetime)
+
+        # 2. 두 시간 모두 유효한 커밋을 찾았는지 확인합니다.
+        if not shaBefore or not shaAfter:
+            print("Warning: Could not find commits for one or both of the given datetimes.")
+            return None
+
+        if shaBefore == shaAfter:
+            print("Warning: The commits at both times are the same. No difference.")
+            # 변경사항이 없는 빈 DiffDTO를 반환할 수도 있습니다.
+            return DiffDTO(
+                repo_name=repo,
+                repo_id=0,
+                owner_name=owner,
+                branch_before=branch,
+                branch_after=branch,
+                commit_before_sha=shaBefore,
+                commit_after_sha=shaAfter,
+                files=[]
+            )
+
+        # 3. 이미 만들어진 getDiffBySHA 함수를 호출하여 최종 결과를 반환합니다.
+        return self.getDiffBySHA(user, token, owner, repo, shaBefore, shaAfter)
 
     def getDiffBySHA(self, user: str, token: str, owner: str, repo: str, shaBefore: str, shaAfter: str) -> DiffDTO:
         '''
