@@ -33,12 +33,13 @@ class UserGBInfoDTO(BaseModel):
     Retrieve data from github.
     Find user from the RDB. If not found fill this with github api(/user) and save in the the DB.
     """
-    # commitary_id: int = Field(..., description="Internal database ID for the user.")
+    # commitary_id: int = Field(..., description="Internal database ID for the user.")  
     name: str = Field(..., description="User's display name, defaults to github_username.")
     emailList: List[str] | None = Field(..., description="List of user's emails.")
     defaultEmail: str | None = Field(..., description="The user's primary email.")
     github_id: int = Field(..., description="GitHub-defined user ID (Foreign Key).")
     github_username: str = Field(..., description="Username of the github account.")
+    github_avatar_url : str # <- ADDED
 
 
 
@@ -82,6 +83,7 @@ class CommitMDDTO(BaseModel):
 
 
     # Data extracted from the commit
+    commit_msg : str #  < --- ADDED 20250912
     author_github_id: int | None = Field(None, description="GitHub ID of the author (can be null).")
     author_name : int # name of the author. (git)
     author_email : str # email of the autor. (git)

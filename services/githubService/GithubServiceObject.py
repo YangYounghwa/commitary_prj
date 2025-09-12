@@ -43,6 +43,8 @@ class GithubService:
         response.raise_for_status()
         return response.json()
 
+
+    # TODO : UserGBInfoDTO updated, must be updated as well
     def getUserMetadata(self, user: str, token: str) -> UserGBInfoDTO:
         """
         Fetches metadata for the authenticated user from GitHub.
@@ -105,6 +107,7 @@ class GithubService:
             
         return BranchListDTO(branchList=branch_list)
 
+    # TODO : CommitListDTO updated, must update as well.
     def getCommitMsgs(self, user: str, token: str, owner: str, repo: str, branch: str, startdatetime: datetime, enddatetime: datetime) -> CommitListDTO:
         '''
         Returns a list of commit messages for a given branch within a time range.
