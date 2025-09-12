@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 
 from .services.githubService.GithubServiceObject import gb_service
 
+import psycopg2
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,6 +19,76 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+
+
+# Using postgre 16.10
+
+
+
+# Vector DB table
+'''CREATE TYPE enum_type AS ENUM ('codebase', 'patch', 'externaldoc');
+CREATE TABLE IF NOT EXISTS vector_data (
+    id TEXT PRIMARY KEY,
+    embedding VECTOR(1536) NOT NULL,
+    metadata_commitary_user BIGINT,
+    metadata_repo_name TEXT,
+    metadata_repo_id BIGINT,
+    metadata_target_branch TEXT,
+    metadata_filepath TEXT,
+    metadata_type enum_type,
+    metadata_lastModifiedTime TIMESTAMPTZ
+);
+'''
+
+# User table.
+'''
+CREATE TABLE IF NOT EXISTS "emailList" (
+    email_key SERIAL PRIMARY KEY,
+    email TEXT UNIQUE,
+    commitary_id BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS "UserInfo" (
+    commitary_id BIGINT PRIMARY KEY,
+    github_id BIGINT,
+    github_name TEXT,
+    emailList_key INTEGER REFERENCES "emailList"(email_key),
+    defaultEmail TEXT,
+    github_url TEXT,
+    github_html_url TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "repos" (
+    commitary_repo_id SERIAL PRIMARY KEY,
+    commitary_id BIGINT,
+    github_id BIGINT,
+    github_name TEXT,
+    github_owner_id BIGINT,
+    github_owner_login TEXT,
+    github_html_url TEXT,
+    github_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    pushed_at TIMESTAMP WITH TIME ZONE
+);
+
+'''    
+
+
+def get_db_connection():
+    """
+    Establishes a connection to the PostgreSQL database using psycopg2.
+    The connection details are fetched from environment variables.
+    """
+    try:
+        # The connection string can be a single string from the DATABASE_URL env var
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        return conn
+    except psycopg2.OperationalError as e:
+        print(f"Database connection failed: {e}")
+        return None
+
+
 
 if not all([app.secret_key, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET]):
     raise ValueError("CRITICAL ERROR: One or more environment variables are missing. Please check your .env file.")
