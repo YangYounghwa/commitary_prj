@@ -9,7 +9,7 @@ import os
 load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "YOUR_PERSONAL_ACCESS_TOKEN")
 
-TEST_REPO_ID = 1024670234
+TEST_REPO_ID = 1025497696
 TEST_USER = "YangYounghwa"
 
 
@@ -83,15 +83,15 @@ def test_get_diff_success(client):
     """
     # Define the datetime range in ISO 8601 format strings.
     # The 'Z' indicates UTC time, which is a best practice.
-    dt_from_str = "2025-06-01T10:00:00Z"
-    dt_to_str = "2025-08-01T10:00:00Z"
+    dt_from_str = "2025-08-24T10:00:00Z"
+    dt_to_str = "2025-08-21T10:00:00Z"
     
     # Define the query parameters
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_from': 'yh_14',
-        'branch_to': 'yh_14',
+        'branch_from': 'yh_1',
+        'branch_to': 'yh_1',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str,
         'default_branch': 'main'
