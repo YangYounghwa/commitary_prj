@@ -132,78 +132,58 @@ class GithubService:
 
         # Use a try-except block to handle potential errors from datetime conversion
         try:
-            # Assuming datetime strings might not have the timezone 'Z' suffix, 
-            # add a default for robust parsing.
             start_dt = datetime.fromisoformat(startdatetime.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(enddatetime.replace('Z', '+00:00'))
         except ValueError as e:
             print(f"ERROR: Invalid datetime format. {e}")
             return CommitListDTO(commitList=[])
 
-        # GraphQL query to fetch commit history
-        COMMIT_HISTORY_QUERY = """
-        query GetCommitHistory($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp!, $until: GitTimestamp!) {
-        repository(owner: $owner, name: $repo) {
-            ref(qualifiedName: $branch) {
-            target {
-                ... on Commit {
-                history(since: $since, until: $until) {
-                    nodes {
-                    oid
-                    author {
-                        name
-                        email
-                        user {
-                        id
-                        }
-                    }
-                    committedDate
-                    message
-                    }
-                }
-                }
-            }
-            }
-        }
-        }
-        """
-        variables = {
-            "owner": owner,
-            "repo": repo,
-            "branch": branch,
+        # Using REST API to get commits because it returns the integer user ID
+        params = {
+            "sha": branch,
             "since": start_dt.isoformat(),
             "until": end_dt.isoformat()
         }
+        commits_endpoint = f"/repos/{owner}/{repo}/commits"
         
         # Debug line
-        print(f"DEBUG: Executing GraphQL query for commits on branch: {branch}")
+        print(f"DEBUG: Using REST API to get commits from {commits_endpoint}")
         try:
-            commits_data = self._execute_graphql(COMMIT_HISTORY_QUERY, variables, token)
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: GraphQL request failed: {e}")
+            print(f"ERROR: REST API request failed: {e}")
             return CommitListDTO(commitList=[])
 
-        commit_nodes = commits_data.get('data', {}).get('repository', {}).get('ref', {}).get('target', {}).get('history', {}).get('nodes', [])
+        commit_list = []
+        for commit in commits_data:
+            # Check if author is a valid user and not a bot or a ghost user
+            author_id = commit['author']['id'] if commit.get('author') and commit['author'].get('id') else None
+            author_name = commit['author']['login'] if commit.get('author') and commit['author'].get('login') else commit['commit']['author']['name']
+            author_email = commit['commit']['author']['email']
+            
+            # In some cases, the commit is not associated with a GitHub user account
+            if author_id is None:
+                print(f"Warning: Commit {commit['sha']} has no valid GitHub user account ID.")
+            
+            commit_list.append(
+                CommitMDDTO(
+                    sha=commit['sha'],
+                    repo_name=repo,
+                    repo_id=repo_id,
+                    owner_name=owner,
+                    branch_sha=branch,
+                    author_github_id=author_id,
+                    author_name=author_name,
+                    author_email=author_email,
+                    commit_datetime=datetime.fromisoformat(commit['commit']['author']['date'].replace('Z', '+00:00')),
+                    commit_msg=commit['commit']['message']
+                )
+            )
 
-        commit_list = [
-            CommitMDDTO(
-                sha=commit['oid'],
-                repo_name=repo,
-                repo_id=repo_id,
-                owner_name=owner,
-                branch_sha=branch,
-                author_github_id=commit.get('author', {}).get('user', {}).get('id') if commit.get('author', {}).get('user') else None,
-                author_name=commit.get('author', {}).get('name'),
-                author_email=commit.get('author', {}).get('email'),
-                commit_datetime=datetime.fromisoformat(commit['committedDate'].replace('Z', '+00:00')),
-                commit_msg=commit['message']  # Added this field back
-            ) for commit in commit_nodes
-        ]
-        
         # Debug line
         print(f"DEBUG: Found {len(commit_list)} commits.")
         return CommitListDTO(commitList=commit_list)
-    
+        
 
     def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
         """
