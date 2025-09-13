@@ -109,7 +109,7 @@ def create_app():
 
         # Step 2: Search for the user using the connection provided by the decorator
         with conn.cursor() as cur:
-            cur.execute("SELECT commitary_id, github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url FROM UserInfo WHERE github_id = %s", (user_gb_info.github_id,))
+            cur.execute("SELECT commitary_id, github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url FROM user_info WHERE github_id = %s", (user_gb_info.github_id,))
             result = cur.fetchone()
 
             if result:
