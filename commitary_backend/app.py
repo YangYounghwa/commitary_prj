@@ -67,8 +67,6 @@ create_db_pool()
 from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
 
-# Global variable for the connection pool
-db_pool = None
 
 def create_app():
     """
