@@ -447,7 +447,7 @@ class GithubService:
         return BranchListDTO(branchList=branch_list)
     
 
-
+    # Added 20250913
 
     def _get_first_commit_sha(self, token: str, owner: str, repo: str, branch: str) -> Optional[str]:
         """
@@ -479,6 +479,70 @@ class GithubService:
             print(f"ERROR: An unexpected error occurred: {e}")
             return None
 
+    def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the latest commit SHA from a source branch that was merged into another
+        branch, before a specific datetime.
+        
+        This function searches for a merge commit on the target branch.
+        
+        :param token: GitHub Personal Access Token.
+        :param owner: The repository owner.
+        :param repo: The repository name.
+        :param merged_into_branch: The branch the source branch was merged into (e.g., 'main').
+        :param source_branch: The branch that was merged (e.g., 'feature/my-new-feature').
+        :param target_datetime: The datetime to search commits until.
+        :return: The SHA of the commit from the source branch, or None if not found.
+        """
+        try:
+            params = {
+                "sha": merged_into_branch,
+                "until": target_datetime.isoformat(),
+                "per_page": 50
+            }
+            
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            
+            page = 1
+            while True:
+                params['page'] = page
+                commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+                
+                if not commits_data:
+                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}'.")
+                    break
+                
+                for commit in commits_data:
+                    # A merge commit has more than one parent
+                    if len(commit['parents']) > 1:
+                        # Check if one of the parents matches the source branch
+                        parent_shas = [p['sha'] for p in commit['parents']]
+                        
+                        # Get the latest commit SHA on the source branch.
+                        # This check is more robust than a message check.
+                        source_branch_latest_sha = self._get_sha_by_datetime(token, owner, repo, source_branch, target_datetime)
+                        
+                        if source_branch_latest_sha and source_branch_latest_sha in parent_shas:
+                            print(f"DEBUG: Found merge commit '{commit['sha']}' for branch '{source_branch}'.")
+                            # The second parent of the merge commit is typically the head of the merged branch.
+                            return commit['parents'][1]['sha']
+
+                if len(commits_data) < 50:
+                    break
+                page += 1
+
+            print(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None
+
+
     def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
                         datetime_from: datetime, datetime_to: datetime,
                         default_merged_branch: str = 'main') -> Optional[DiffDTO]:
@@ -507,23 +571,14 @@ class GithubService:
         shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         shaAfter = self._get_sha_by_datetime(user_token, owner, repo_name, branch_to, datetime_to)
 
-        # Fallback logic if the direct lookup fails for branch_from and it's not the default merged branch
-        if not shaBefore and branch_from != default_merged_branch:
-            print(f"Warning: Direct lookup failed for branch '{branch_from}'. Attempting to find merge commit.")
-            shaBefore = self._get_sha_by_datetime_after_merge(
-                user_token, owner, repo_name, default_merged_branch, branch_from, datetime_from
-            )
-            
-        # If a commit is still not found for branch_from, it means datetime_from is before the branch's creation.
-        # In this case, we compare from the very first commit of the branch.
+        # Fallback logic for `shaBefore`
         if not shaBefore:
-            print(f"Warning: Could not find a commit before '{datetime_from}' on '{branch_from}'. Comparing from the branch's beginning.")
+            print(f"Warning: Direct lookup failed for branch '{branch_from}' at '{datetime_from}'. Comparing from the branch's beginning.")
             shaBefore = self._get_first_commit_sha(user_token, owner, repo_name, branch_from)
-
-
-        # Fallback logic for branch_to and it's not the default merged branch
-        if not shaAfter and branch_to != default_merged_branch:
-            print(f"Warning: Direct lookup failed for branch '{branch_to}'. Attempting to find merge commit.")
+            
+        # Fallback logic for `shaAfter`
+        if not shaAfter:
+            print(f"Warning: Direct lookup failed for branch '{branch_to}' at '{datetime_to}'. Attempting to find merge commit.")
             shaAfter = self._get_sha_by_datetime_after_merge(
                 user_token, owner, repo_name, default_merged_branch, branch_to, datetime_to
             )
