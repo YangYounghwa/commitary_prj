@@ -124,7 +124,7 @@ def test_get_diff_success(client):
     # assert first_file.get("filename") == "src/main.py"
 
 
-@pytest.mark.skip(reason="Checked.")
+
 def test_get_commits_success(client):
     """
     Test the /githubCommits endpoint with valid parameters.
