@@ -41,7 +41,7 @@ def test_get_repos_success(client):
     response = client.get("/repos", query_string={'user': 'YangYounghwa', 'token': GITHUB_TOKEN})
     print(response)
 
-# @pytest.mark.skip(reason="Do it later")
+
 def test_user_success(client):
     # The 'client' fixture is passed to this test function, which automatically
     # provides the corrected test client instance.
