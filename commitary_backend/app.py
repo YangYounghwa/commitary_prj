@@ -317,7 +317,8 @@ def create_app():
                     "github_html_url": row[6],
                     "github_url": row[7],
                     "description": None, # The DB schema doesn't have this.
-                    "github_node_id" : None
+                    "github_node_id" : None,
+                    "github_full_name" : row[5]+r'/'+row[3]
                     # Assuming RepoDTO is updated to include these fields for consistency
 
                 }
