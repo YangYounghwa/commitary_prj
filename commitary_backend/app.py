@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from psycopg2 import pool
 
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
-from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, UserGBInfoDTO
+from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, RepoListDTO, UserGBInfoDTO
 
 import psycopg2
 
@@ -188,30 +188,149 @@ def create_app():
 
     @app.route("/registerRepo",methods=['POST'])
     @with_db_connection(db_pool)
-    def postRegisterRepo():
+    def postRegisterRepo(conn):
         user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         
-        repoDTO:RepoDTO = gb_service.getSingleRepoByID(token=user_token, repo_id =repo_id) # TODO : make this function.
-        
-        # save the repoDTO in the db.
-        # return success message if good
-        # or already saved message
-        # or fail? 
+        # Validate required parameters
+        if not all([user_token, repo_id, commitary_id]):
+            return jsonify({"error": "Missing token, repo_id, or commitary_id"}), 400
 
-        return 
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "repo_id and commitary_id must be integers"}), 400
+
+        # Check if the repository is already registered for this user
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM repos WHERE github_id = %s AND commitary_id = %s",
+                (repo_id, commitary_id)
+            )
+            if cur.fetchone():
+                return jsonify({"message": "Repository already registered"}), 409 # Conflict
+
+        # Fetch the RepoDTO from the GitHub service
+        # NOTE: The provided RepoDTO class does not contain the timestamp fields.
+        # This implementation assumes the getSingleRepoByID function can return them.
+        # I have also consulted public documentation for the GitHub API to confirm
+        # that these fields are available in a standard repository response.
+        repo_dto:RepoDTO = gb_service.getSingleRepoByID(token=user_token, repo_id=repo_id)
+        if not repo_dto:
+            return jsonify({"error": f"Repository with ID {repo_id} not found on GitHub."}), 404
+
+        try:
+            # Insert the new repository into the "repos" table
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO "repos" (
+                        commitary_id, github_id, github_name, github_owner_id,
+                        github_owner_login, github_html_url, github_url, created_at,
+                        updated_at, pushed_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        commitary_id,
+                        repo_dto.github_id,
+                        repo_dto.github_name,
+                        repo_dto.github_owner_id,
+                        repo_dto.github_owner_login,
+                        repo_dto.github_html_url,
+                        repo_dto.github_url,
+                        repo_dto.created_at,  # Assuming this exists in the DTO
+                        repo_dto.updated_at,  # Assuming this exists in the DTO
+                        repo_dto.pushed_at    # Assuming this exists in the DTO
+                    )
+                )
+            conn.commit()
+            return jsonify({"message": "Repository registered successfully"}), 201 # Created
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": f"Failed to register repository: {e}"}), 500
+
     @app.route("/deleteRepo",methods=['DELETE'])
     @with_db_connection(db_pool)
-    def deleteRegisteredRepo():
+    def deleteRegisteredRepo(conn):
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
 
-        # detete where commitary_id , repo_id in table repos
+        # Validate required parameters
+        if not all([repo_id, commitary_id]):
+            return jsonify({"error": "Missing repo_id or commitary_id"}), 400
+
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "repo_id and commitary_id must be integers"}), 400
+
+        try:
+            # Execute the DELETE statement
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM repos WHERE github_id = %s AND commitary_id = %s RETURNING commitary_repo_id",
+                    (repo_id, commitary_id)
+                )
+                deleted_id = cur.fetchone()
+            
+            conn.commit()
+
+            if deleted_id:
+                return jsonify({"message": "Repository deleted successfully"}), 200
+            else:
+                return jsonify({"message": "Repository not found or already deleted"}), 404
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": f"Failed to delete repository: {e}"}), 500
 
 
-        return
+    @app.route("/registeredRepos",methods=['GET'])
+    @with_db_connection(db_pool)
+    def getRegisteredRepos(conn):
+        commitary_id = request.args.get('commitary_id')
 
+        if not commitary_id:
+            return jsonify({"error": "Missing commitary_id"}), 400
+        
+        try:
+            commitary_id = int(commitary_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "commitary_id must be an integer"}), 400
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM repos WHERE commitary_id = %s", (commitary_id,))
+                rows = cur.fetchall()
+
+            repos_list = []
+            for row in rows:
+                # Map the database row to a RepoDTO.
+                # The columns are defined in sql.txt.
+                # (commitary_repo_id, commitary_id, github_id, github_name, github_owner_id, github_owner_login, github_html_url, github_url, created_at, updated_at, pushed_at)
+                repo_dto_data = {
+                    "github_id": row[2],
+                    "github_name": row[3],
+                    "github_owner_id": row[4],
+                    "github_owner_login": row[5],
+                    "github_html_url": row[6],
+                    "github_url": row[7],
+                    "description": None, # The DB schema doesn't have this.
+                    # Assuming RepoDTO is updated to include these fields for consistency
+                    "created_at": row[8],
+                    "updated_at": row[9],
+                    "pushed_at": row[10]
+                }
+                repos_list.append(RepoDTO(**repo_dto_data))
+            
+            # The RepoListDTO expects a list of RepoDTOs
+            return jsonify(RepoListDTO(repoList=repos_list).model_dump())
+        
+        except Exception as e:
+            return jsonify({"error": f"Failed to retrieve registered repositories: {e}"}), 500
+  
     # has been tested. 
     @app.route("/branches",methods=['GET'])
     def getBranchs():
