@@ -70,7 +70,7 @@ class GithubService:
         )
 
 
-    def getRepos(self, user: str, token: str, commitary_id: int) -> RepoListDTO:
+    def getRepos(self, user: str, token: str) -> RepoListDTO:
         '''
         Returns list of repositories the authenticated user has access to.
         '''

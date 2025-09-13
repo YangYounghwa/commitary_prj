@@ -18,7 +18,7 @@ class RepoDTO(BaseModel):
     github_html_url : str # web URL of the repository. 
     github_url : str # api URL of the repository. 
     github_full_name : str
-    description : None
+    description : str | None
 
 
 
