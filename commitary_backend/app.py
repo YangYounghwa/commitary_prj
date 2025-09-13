@@ -318,9 +318,7 @@ def create_app():
                     "github_url": row[7],
                     "description": None, # The DB schema doesn't have this.
                     # Assuming RepoDTO is updated to include these fields for consistency
-                    "created_at": row[8],
-                    "updated_at": row[9],
-                    "pushed_at": row[10]
+
                 }
                 repos_list.append(RepoDTO(**repo_dto_data))
             
