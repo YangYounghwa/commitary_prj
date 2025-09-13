@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from psycopg2 import pool
 
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
-from commitary_backend.dto.gitServiceDTO import BranchListDTO, DiffDTO, RepoDTO, UserGBInfoDTO
+from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, UserGBInfoDTO
 
 import psycopg2
 
@@ -101,6 +101,7 @@ def create_app():
         user_token = request.args.get('token')
         userinfo = None
 
+        # DEBUG CODE : DELETE THIS AFTER DEBUGGING.
         print(f"DEBUG: Token received: {user_token}")
  
 
@@ -126,7 +127,7 @@ def create_app():
                 with conn.cursor() as insert_cur:
                     insert_cur.execute(
                         "INSERT INTO user_info (github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING commitary_id",
-                        (user_gb_info.github_id, user_gb_info.github_username, None, None, None, user_gb_info.github_avatar_url)
+                        (user_gb_info.github_id, user_gb_info.github_username, None, user_gb_info.github_url, user_gb_info.github_html_url, user_gb_info.github_avatar_url)
                     )
                     new_commitary_id = insert_cur.fetchone()[0]
                     conn.commit()
@@ -143,7 +144,15 @@ def create_app():
         else:
             return jsonify({"error": "Failed to retrieve or register user information."}), 500
 
-
+    @app.route("/update_user",methods=['POST'])
+    @with_db_connection(db_pool)
+    def updateUserDB():
+        # TODO : Update DB user info table according to the github.
+        #   priority : Low
+        # 
+        user_token = request.args.get('token')
+        user_gb_info: UserGBInfoDTO = gb_service.getUserMetadata(user=None, token=user_token)
+        return
 
     @app.route("/repos")
     def getRepos():
@@ -171,8 +180,8 @@ def create_app():
         branch = request.args.get('branch_name')
 
 
-        commits_dto =  gb_service.getCommitMsgs(token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime,commitary_id=commitary_id)
-        commits_dict = commits_dto.model_dump()
+        commits_dto:CommitListDTO =  gb_service.getCommitMsgs(token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime,commitary_id=commitary_id)
+        commits_dict:dict = commits_dto.model_dump()
         return jsonify(commits_dict)
 
 
@@ -183,7 +192,7 @@ def create_app():
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         
-        repoDTO:RepoDTO # gb_service.getSingleRepoByID(token=token, repo_id =repo_id) # TODO : make this function.
+        repoDTO:RepoDTO = gb_service.getSingleRepoByID(token=user_token, repo_id =repo_id) # TODO : make this function.
         
         # save the repoDTO in the db.
         # return success message if good
@@ -202,14 +211,17 @@ def create_app():
 
         return
 
-    @app.route("/branchs",methods=['GET'])
+    @app.route("/branches",methods=['GET'])
     def getBranchs():
         repo_id = request.args.get('repo_id')
         user_token = request.args.get('token')
 
-        # branchListDTO: BranchListDTO = gb_service.getBranchesByRepoId(user=None,token=user_token,repo_id =repo_id)
-
+        branchListDTO: BranchListDTO = gb_service.getBranchesByRepoId(user=None,token=user_token,repo_id =repo_id)
+        branch_dict = branchListDTO.model_dump()
         #returns List of branches.  
+        return jsonify(branch_dict)
+    
+
 
     @app.route("/diff",methods=['GET'])
     def getDiff():

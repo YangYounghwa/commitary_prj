@@ -321,7 +321,7 @@ class GithubService:
                 return None
             raise
     
-    def getBranchesByRepoId(self, user: str, token: str, repo_id: int) -> BranchListDTO:
+    def getBranchesByRepoId(self, token: str, repo_id: int,user: str=None) -> BranchListDTO:
         """
         Returns a list of branches for a given repository ID.
         """
@@ -392,6 +392,7 @@ class GithubService:
         diff_dto.branch_after = branch_to
         
         return diff_dto
+    
 
 # Singleton instance
 gb_service = GithubService()

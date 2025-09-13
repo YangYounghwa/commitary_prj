@@ -9,7 +9,9 @@ import os
 load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "YOUR_PERSONAL_ACCESS_TOKEN")
 
-# @pytest.mark.skip(reason="Do it later")
+TEST_REPO_ID = 1024670234
+
+
 @pytest.fixture
 def app_run():
     app = create_app()
@@ -21,7 +23,7 @@ def app_run():
     yield app
 
 
-# @pytest.mark.skip(reason="Do it later")
+
 @pytest.fixture
 def client(app_run):
     # This calls the test client on the app created by the 'app_run' fixture.
@@ -39,15 +41,41 @@ def test_get_repos_success(client):
 
     # Make the request using the test client
     response = client.get("/repos", query_string={'user': 'YangYounghwa', 'token': GITHUB_TOKEN})
-    print(response)
+    assert response.status_code == 200
+    json_data = response.json
+    
+    # Print the entire JSON data
+    print("Full JSON response:")
+    print(json_data)
 
 
+
+#@pytest.mark.skip(reason="Works well now.")
 def test_user_success(client):
     # The 'client' fixture is passed to this test function, which automatically
     # provides the corrected test client instance.
 
     # Make the request using the test client
     response = client.get("/user", query_string={'token': GITHUB_TOKEN})
-    print("Response to '/user'")
-    print(response)
+    assert response.status_code == 200
+    json_data = response.json
+    
+    # Print the entire JSON data
+    print("Full JSON response:")
+    print(json_data)
+
+
+
+def test_branches_success(client):
+    # The 'client' fixture is passed to this test function, which automatically
+    # provides the corrected test client instance.
+
+    # Make the request using the test client
+    response = client.get("/branches", query_string={'token': GITHUB_TOKEN,'repo_id':TEST_REPO_ID})
+    assert response.status_code == 200
+    json_data = response.json
+    
+    # Print the entire JSON data
+    print("Full JSON response:")
+    print(json_data)
 
