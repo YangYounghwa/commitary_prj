@@ -633,17 +633,8 @@ class GithubService:
                         datetime_from: datetime, datetime_to: datetime,
                         default_merged_branch: str = 'main') -> Optional[DiffDTO]:
         """
-        Returns the difference between two points in time on two (potentially different) branches,
-        identified by a repository ID. Includes a fallback to find merged commits.
-        
-        :param user_token: The user's GitHub access token.
-        :param repo_id: The ID of the repository.
-        :param branch_from: The name of the 'from' branch.
-        :param branch_to: The name of the 'to' branch.
-        :param datetime_from: The datetime for the 'from' point.
-        :param datetime_to: The datetime for the 'to' point.
-        :param default_merged_branch: The branch to check for merge commits if the others are not found.
-        :return: A DiffDTO object or None.
+        Returns the difference between two points in time on two (potentially different) branches.
+        Corrects the SHA finding logic.
         """
         print("DEBUG: Starting getDiffByIdTime2 function.")
         repo_dto = self.getSingleRepoByID(user_token, repo_id)
@@ -655,16 +646,17 @@ class GithubService:
         repo_name = repo_dto.github_name
         print(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
 
-        # Determine shaBefore
-        shaBefore = shaBefore = self._get_first_commit_sha_after_datetime(user_token, owner, repo_name, branch_from, datetime_from)
+        # Correct logic for finding the SHA before the start date
+        shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         if not shaBefore:
-            print(f"DEBUG: No commit found on branch '{branch_from}' before '{datetime_from}'. Falling back to the first commit.")
-            shaBefore = self._get_first_commit_sha(user_token, owner, repo_name, branch_from)
-
-        # Determine shaAfter
-        shaAfter = self._get_sha_by_datetime(user_token, owner, repo_name, branch_to, datetime_to)
-        if not shaAfter and branch_to != default_merged_branch:
-            print(f"DEBUG: No direct commit found on branch '{branch_to}' before '{datetime_to}'. Attempting to find merge commit from '{default_merged_branch}'.")
+            print(f"DEBUG: No commit found on branch '{branch_from}' before '{datetime_from}'.")
+            return None
+        
+        # Correct logic for finding the SHA after the end date.
+        # We want the first commit *after* the `datetime_from`
+        shaAfter = self._get_first_commit_sha_after_datetime(user_token, owner, repo_name, branch_to, datetime_from)
+        if not shaAfter:
+            print(f"DEBUG: No direct commit found on branch '{branch_to}' after '{datetime_from}'. Attempting to find merge commit from '{default_merged_branch}'.")
             shaAfter = self._get_sha_by_datetime_after_merge(
                 user_token, owner, repo_name, default_merged_branch, branch_to, datetime_to
             )
