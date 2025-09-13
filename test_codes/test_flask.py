@@ -90,8 +90,8 @@ def test_get_diff_success(client):
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_from': 'yh_13',
-        'branch_to': 'yh_13',
+        'branch_from': 'yh_14',
+        'branch_to': 'yh_14',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str,
         'default_branch': 'main'
