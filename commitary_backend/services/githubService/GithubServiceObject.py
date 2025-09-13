@@ -449,6 +449,36 @@ class GithubService:
 
 
 
+    def _get_first_commit_sha(self, token: str, owner: str, repo: str, branch: str) -> Optional[str]:
+        """
+        Finds the first commit SHA on a branch.
+        
+        This function uses the GitHub API's commits endpoint, sorting by ascending
+        date to find the initial commit.
+        """
+        try:
+            params = {
+                "sha": branch,
+                "per_page": 1,
+                "direction": "asc"
+            }
+            
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+
+            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
+                return commits_data[0]['sha']
+            
+            print(f"DEBUG: No commits found on branch '{branch}'.")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None
+
     def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
                         datetime_from: datetime, datetime_to: datetime,
                         default_merged_branch: str = 'main') -> Optional[DiffDTO]:
@@ -477,13 +507,21 @@ class GithubService:
         shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         shaAfter = self._get_sha_by_datetime(user_token, owner, repo_name, branch_to, datetime_to)
 
-        # Fallback logic if the direct lookup fails
+        # Fallback logic if the direct lookup fails for branch_from
         if not shaBefore:
             print(f"Warning: Direct lookup failed for branch '{branch_from}'. Attempting to find merge commit.")
             shaBefore = self._get_sha_by_datetime_after_merge(
                 user_token, owner, repo_name, default_merged_branch, branch_from, datetime_from
             )
             
+        # If a commit is still not found for branch_from, it means datetime_from is before the branch's creation.
+        # In this case, we compare from the very first commit of the branch.
+        if not shaBefore:
+            print(f"Warning: Could not find a commit before '{datetime_from}' on '{branch_from}'. Comparing from the branch's beginning.")
+            shaBefore = self._get_first_commit_sha(user_token, owner, repo_name, branch_from)
+
+
+        # Fallback logic for branch_to
         if not shaAfter:
             print(f"Warning: Direct lookup failed for branch '{branch_to}'. Attempting to find merge commit.")
             shaAfter = self._get_sha_by_datetime_after_merge(
@@ -517,7 +555,6 @@ class GithubService:
             diff_dto.branch_after = branch_to
         
         return diff_dto
-    
 
 # Singleton instance
 gb_service = GithubService()
