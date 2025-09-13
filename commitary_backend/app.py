@@ -242,6 +242,8 @@ def create_app():
             datetime_from = datetime.fromisoformat(datetime_from_str) if datetime_from_str else None
             datetime_to = datetime.fromisoformat(datetime_to_str) if datetime_to_str else None
         except ValueError as e:
+            print(e)
+            print(f"{datetime_from_str}\n{datetime_to_str}\n{datetime_from}\n{datetime_to}")
             return jsonify({"error": f"Invalid datetime format: {e}"}), 400
 
         diff: DiffDTO = gb_service.getDiffByIdTime(
@@ -256,6 +258,9 @@ def create_app():
         # Pydantic's .model_dump() will automatically convert
         # Python datetime objects into ISO 8601 strings
         diff_dict = diff.model_dump()
+
+        # Debug Line
+        print(diff.model_dump_json())
         return jsonify(diff_dict)
 
 
