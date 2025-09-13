@@ -101,7 +101,7 @@ def test_get_diff_success(client):
     response = client.get("/diff", query_string=query_params)
     
     # Assert that the status code is 200 OK
-    assert response.status_code == 200
+    
     
     # Get the JSON data from the response.
     # The .json property handles deserialization from JSON string to Python dict.
@@ -120,6 +120,7 @@ def test_get_diff_success(client):
     
     first_file = json_data["files"][0]
     assert "filename" in first_file
+    assert response.status_code == 200
     # assert first_file.get("filename") == "src/main.py"
 
 

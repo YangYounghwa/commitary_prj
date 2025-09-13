@@ -192,7 +192,7 @@ class GithubService:
             # or "Merge branch '<source_branch>' into '<target_branch>'".
             # We can use this pattern to filter.
             merge_commit_message_pattern = f"Merge pull request from {source_branch}"
-            
+            print('merge_commit_message_pattern') 
             params = {
                 "sha": merged_into_branch,
                 "until": target_datetime.isoformat(),

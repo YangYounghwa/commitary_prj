@@ -241,6 +241,7 @@ def create_app():
 
         # Basic input validation and type conversion
         if not all([repo_id, user_token, branch_from, branch_to, datetime_from_str, datetime_to_str]):
+            print("Missing one or more required parameters.")
             return "Missing one or more required parameters.", 400
 
         try:
