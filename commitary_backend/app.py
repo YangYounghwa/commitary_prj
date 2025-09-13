@@ -249,6 +249,7 @@ def create_app():
             datetime_from = datetime.fromisoformat(datetime_from_str)
             datetime_to = datetime.fromisoformat(datetime_to_str)
         except (ValueError, TypeError):
+            print("Invalid parameter type. Datetime must be in ISO format and repo_id must be an integer.")
             return "Invalid parameter type. Datetime must be in ISO format and repo_id must be an integer.", 400
 
         # Assuming 'api_service' is an instance of YourApiService
