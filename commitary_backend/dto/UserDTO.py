@@ -20,6 +20,6 @@ class UserInfoDTO(BaseModel):
     defaultEmail: str | None = Field(None, description="The user's default email address.")
     github_url: str | None = Field(None, description="API URL for the user's GitHub profile.")
     github_html_url: str | None = Field(None, description="Web URL for the user's GitHub profile.")
-    github_avatar_url : str # <-- ADDED
+    github_avatar_url: str | None
     # email_list: List[EmailDTO] = Field(..., description="A list of all emails for this user.") # leave as a blank
     

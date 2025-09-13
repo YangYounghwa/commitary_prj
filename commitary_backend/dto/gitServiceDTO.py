@@ -39,7 +39,7 @@ class UserGBInfoDTO(BaseModel):
     defaultEmail: str | None = Field(..., description="The user's primary email.")
     github_id: int = Field(..., description="GitHub-defined user ID (Foreign Key).")
     github_username: str = Field(..., description="Username of the github account.")
-    github_avatar_url : str
+    github_avatar_url: str | None
     github_url : str 
     github_html_url : str  
 
