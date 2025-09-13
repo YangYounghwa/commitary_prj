@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from psycopg2 import pool
 
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
-from commitary_backend.dto.gitServiceDTO import BranchListDTO, DiffDTO, RepoDTO, UserGBInfoDTO
+from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, RepoListDTO, UserGBInfoDTO
 
 import psycopg2
 
@@ -67,8 +67,6 @@ create_db_pool()
 from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
 
-# Global variable for the connection pool
-db_pool = None
 
 def create_app():
     """
@@ -103,12 +101,16 @@ def create_app():
         user_token = request.args.get('token')
         userinfo = None
 
+        # DEBUG CODE : DELETE THIS AFTER DEBUGGING.
+        print(f"DEBUG: Token received: {user_token}")
+ 
+
         # Step 1: Get user metadata from GitHub
         user_gb_info: UserGBInfoDTO = gb_service.getUserMetadata(user=None, token=user_token)
 
         # Step 2: Search for the user using the connection provided by the decorator
         with conn.cursor() as cur:
-            cur.execute("SELECT commitary_id, github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url FROM UserInfo WHERE github_id = %s", (user_gb_info.github_id,))
+            cur.execute("SELECT commitary_id, github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url FROM user_info WHERE github_id = %s", (user_gb_info.github_id,))
             result = cur.fetchone()
 
             if result:
@@ -124,8 +126,8 @@ def create_app():
                 # github_url, github_html_url  is Empty for now, it will be added later.
                 with conn.cursor() as insert_cur:
                     insert_cur.execute(
-                        "INSERT INTO UserInfo (github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING commitary_id",
-                        (user_gb_info.github_id, user_gb_info.github_username, None, None, None, user_gb_info.github_avatar_url)
+                        "INSERT INTO user_info (github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING commitary_id",
+                        (user_gb_info.github_id, user_gb_info.github_username, None, user_gb_info.github_url, user_gb_info.github_html_url, user_gb_info.github_avatar_url)
                     )
                     new_commitary_id = insert_cur.fetchone()[0]
                     conn.commit()
@@ -142,7 +144,15 @@ def create_app():
         else:
             return jsonify({"error": "Failed to retrieve or register user information."}), 500
 
-
+    @app.route("/update_user",methods=['POST'])
+    @with_db_connection(db_pool)
+    def updateUserDB():
+        # TODO : Update DB user info table according to the github.
+        #   priority : Low
+        # 
+        user_token = request.args.get('token')
+        user_gb_info: UserGBInfoDTO = gb_service.getUserMetadata(user=None, token=user_token)
+        return
 
     @app.route("/repos")
     def getRepos():
@@ -150,79 +160,253 @@ def create_app():
         user_token = request.args.get('token')
 
         repos_dto = gb_service.getRepos(user=user_name,token=user_token)
+        
         repos_dict = repos_dto.model_dump() 
+
+        if app.config.get("TESTING"): # type: ignore
+            print("Repos dict : ")
+            print(repos_dict)
         return jsonify(repos_dict)
+
+
 
     @app.route("/githubCommits")
     def getCommits():
-        user_name = request.args.get('user')
+
         user_token = request.args.get('token')
-        commitary_id = request.args.get('commitary_id')
+  
         startdatetime = request.args.get('datetime_from')
         enddatetime = request.args.get('datetime_to')
         branch = request.args.get('branch_name')
+        repo_id = request.args.get('repo_id')
 
 
-        commits_dto =  gb_service.getCommitMsgs(token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime,commitary_id=commitary_id)
-        commits_dict = commits_dto.model_dump()
+        commits_dto:CommitListDTO =  gb_service.getCommitMsgs(repo_id=repo_id,token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime)
+        commits_dict:dict = commits_dto.model_dump()
         return jsonify(commits_dict)
 
 
     @app.route("/registerRepo",methods=['POST'])
     @with_db_connection(db_pool)
-    def postRegisterRepo():
+    def postRegisterRepo(conn):
         user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         
-        repoDTO:RepoDTO # gb_service.getSingleRepoByID(token=token, repo_id =repo_id) # TODO : make this function.
-        
-        # save the repoDTO in the db.
-        # return success message if good
-        # or already saved message
-        # or fail? 
+        # Validate required parameters
+        if not all([user_token, repo_id, commitary_id]):
+            return jsonify({"error": "Missing token, repo_id, or commitary_id"}), 400
 
-        return 
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "repo_id and commitary_id must be integers"}), 400
+
+        # Check if the repository is already registered for this user
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM repos WHERE github_id = %s AND commitary_id = %s",
+                (repo_id, commitary_id)
+            )
+            if cur.fetchone():
+                return jsonify({"message": "Repository already registered"}), 409 # Conflict
+
+        # Fetch the RepoDTO from the GitHub service
+        repo_dto:RepoDTO = gb_service.getSingleRepoByID(token=user_token, repo_id=repo_id)
+        if not repo_dto:
+            return jsonify({"error": f"Repository with ID {repo_id} not found on GitHub."}), 404
+
+        try:
+            # Get the current time in UTC, which is recommended for database timestamps
+            now_utc = datetime.now(timezone.utc)
+            
+            # Insert the new repository into the "repos" table
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO "repos" (
+                        commitary_id, github_id, github_name, github_owner_id,
+                        github_owner_login, github_html_url, github_url, created_at,
+                        updated_at, pushed_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        commitary_id,
+                        repo_dto.github_id,
+                        repo_dto.github_name,
+                        repo_dto.github_owner_id,
+                        repo_dto.github_owner_login,
+                        repo_dto.github_html_url,
+                        repo_dto.github_url,
+                        now_utc,
+                        now_utc,
+                        now_utc
+                    )
+                )
+            conn.commit()
+            return jsonify({"message": "Repository registered successfully"}), 201 # Created
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": f"Failed to register repository: {e}"}), 500
+
     @app.route("/deleteRepo",methods=['DELETE'])
     @with_db_connection(db_pool)
-    def deleteRegisteredRepo():
+    def deleteRegisteredRepo(conn):
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
 
-        # detete where commitary_id , repo_id in table repos
+        # Validate required parameters
+        if not all([repo_id, commitary_id]):
+            return jsonify({"error": "Missing repo_id or commitary_id"}), 400
+
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "repo_id and commitary_id must be integers"}), 400
+
+        try:
+            # Execute the DELETE statement
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM repos WHERE github_id = %s AND commitary_id = %s RETURNING commitary_repo_id",
+                    (repo_id, commitary_id)
+                )
+                deleted_id = cur.fetchone()
+            
+            conn.commit()
+
+            if deleted_id:
+                return jsonify({"message": "Repository deleted successfully"}), 200
+            else:
+                return jsonify({"message": "Repository not found or already deleted"}), 404
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": f"Failed to delete repository: {e}"}), 500
 
 
-        return
+    @app.route("/registeredRepos",methods=['GET'])
+    @with_db_connection(db_pool)
+    def getRegisteredRepos(conn):
+        commitary_id = request.args.get('commitary_id')
 
-    @app.route("/branchs",methods=['GET'])
+        if not commitary_id:
+            return jsonify({"error": "Missing commitary_id"}), 400
+        
+        try:
+            commitary_id = int(commitary_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "commitary_id must be an integer"}), 400
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM repos WHERE commitary_id = %s", (commitary_id,))
+                rows = cur.fetchall()
+
+            repos_list = []
+            for row in rows:
+                # Map the database row to a RepoDTO.
+                # The columns are defined in sql.txt.
+                # (commitary_repo_id, commitary_id, github_id, github_name, github_owner_id, github_owner_login, github_html_url, github_url, created_at, updated_at, pushed_at)
+                repo_dto_data = {
+                    "github_id": row[2],
+                    "github_name": row[3],
+                    "github_owner_id": row[4],
+                    "github_owner_login": row[5],
+                    "github_html_url": row[6],
+                    "github_url": row[7],
+                    "description": None, # The DB schema doesn't have this.
+                    "github_node_id" : None,
+                    "github_full_name" : row[5]+r'/'+row[3]
+                    # Assuming RepoDTO is updated to include these fields for consistency
+
+                }
+                repos_list.append(RepoDTO(**repo_dto_data))
+            
+            # The RepoListDTO expects a list of RepoDTOs
+            return jsonify(RepoListDTO(repoList=repos_list).model_dump())
+        
+        except Exception as e:
+            print(e)
+            return jsonify({"error": f"Failed to retrieve registered repositories: {e}"}), 500
+  
+    # has been tested. 
+    @app.route("/branches",methods=['GET'])
     def getBranchs():
         repo_id = request.args.get('repo_id')
         user_token = request.args.get('token')
 
-        # branchListDTO: BranchListDTO = gb_service.getBranchesByRepoId(user=None,token=user_token,repo_id =repo_id)
-
+        branchListDTO: BranchListDTO = gb_service.getBranchesByRepoId(user=None,token=user_token,repo_id =repo_id)
+        branch_dict = branchListDTO.model_dump()
         #returns List of branches.  
+        return jsonify(branch_dict)
+    
 
-    @app.route("/diff",methods=['GET'])
+
+    @app.route("/diff", methods=['GET'])
     def getDiff():
+        """
+        Handles a GET request to compare two points in time on different branches.
+        """
         repo_id = request.args.get('repo_id')
         user_token = request.args.get('token')
         branch_from = request.args.get('branch_from')
         branch_to = request.args.get('branch_to')
-        datetime_from = request.args.get('datetime_from')
-        datetime_to = request.args.get('datetime_to')
-
-        # must transform datetime to appropriate
-    
+        datetime_from_str = request.args.get('datetime_from')
+        datetime_to_str = request.args.get('datetime_to')
         
-        diff:DiffDTO
-        diff: DiffDTO  = gb_service.getDiffByIdTime(user_token = user_token, repo_id=repo_id,
-                                                    branch_from = branch_from, branch_to = branch_to, 
-                                                    datetime_from= datetime_from, datetime_to = datetime_to)
-        # TODO : create getDiffByIdTime
+        # Get the default_branch argument with a default value of 'main'
+        default_branch = request.args.get('default_branch', 'main')
 
-        diff_dict = diff.model_dump()
-        return jsonify(diff_dict) 
+        # Basic input validation and type conversion
+        if not all([repo_id, user_token, branch_from, branch_to, datetime_from_str, datetime_to_str]):
+            print("Missing one or more required parameters.")
+            return "Missing one or more required parameters.", 400
+
+        try:
+            repo_id = int(repo_id)
+
+            # Fix for the 'Z' suffix issue in datetime.fromisoformat()
+            # It's a robust solution for all Python versions, even 3.11+
+            if datetime_from_str.endswith('Z'):
+                datetime_from_str = datetime_from_str.replace('Z', '+00:00')
+            if datetime_to_str.endswith('Z'):
+                datetime_to_str = datetime_to_str.replace('Z', '+00:00')
+                
+            datetime_from = datetime.fromisoformat(datetime_from_str)
+            datetime_to = datetime.fromisoformat(datetime_to_str)
+        except (ValueError, TypeError) as e:
+            print(f"Invalid parameter type or format. Error: {e}")
+            return "Invalid parameter type or format. Datetime must be in ISO format and repo_id must be an integer.", 400
+
+
+        # Assuming 'api_service' is an instance of YourApiService
+        
+        
+        # Call the core logic function with all the arguments, including the default_branch
+        diff_dto = gb_service.getDiffByIdTime2(
+            user_token=user_token,
+            repo_id=repo_id,
+            branch_from=branch_from,
+            branch_to=branch_to,
+            datetime_from=datetime_from,
+            datetime_to=datetime_to,
+            default_merged_branch=default_branch
+        )
+
+        # Pydantic's .model_dump() will automatically convert
+        # Python datetime objects into ISO 8601 strings
+
+        if diff_dto:
+            diff_dict = diff_dto.model_dump()
+
+            # Debug Line
+            # print(diff_dto.model_dump_json())
+            return jsonify(diff_dict)
+
+        else:
+            return "Failed to get the diff. See server logs for details.", 500
 
 
 

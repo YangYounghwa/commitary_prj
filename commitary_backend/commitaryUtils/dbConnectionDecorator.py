@@ -14,6 +14,10 @@ def with_db_connection(db_pool):
         """The actual decorator."""
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+
+            # TODO : Delete this after Debugging Debug Line
+            print(f"DEBUG: @with_db_connection decorator called for function: {func.__name__}")
+
             if not db_pool:
                 # This should ideally be caught at startup, but it's a good fail-safe
                 return jsonify({"error": "Database connection pool not available."}), 500
