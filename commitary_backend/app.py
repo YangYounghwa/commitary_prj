@@ -211,6 +211,7 @@ def create_app():
 
         return
 
+    # has been tested. 
     @app.route("/branches",methods=['GET'])
     def getBranchs():
         repo_id = request.args.get('repo_id')
@@ -223,27 +224,36 @@ def create_app():
     
 
 
-    @app.route("/diff",methods=['GET'])
+    @app.route("/diff", methods=['GET'])
     def getDiff():
         repo_id = request.args.get('repo_id')
         user_token = request.args.get('token')
         branch_from = request.args.get('branch_from')
         branch_to = request.args.get('branch_to')
-        datetime_from = request.args.get('datetime_from')
-        datetime_to = request.args.get('datetime_to')
+        datetime_from_str = request.args.get('datetime_from')
+        datetime_to_str = request.args.get('datetime_to')
 
-        # must transform datetime to appropriate
-    
-        
-        diff:DiffDTO
-        diff: DiffDTO  = gb_service.getDiffByIdTime(user_token = user_token, repo_id=repo_id,
-                                                    branch_from = branch_from, branch_to = branch_to, 
-                                                    datetime_from= datetime_from, datetime_to = datetime_to)
-        # TODO : create getDiffByIdTime
+        # datetime format is like this : '2023-10-27T10:30:00Z'
+        # Convert the string arguments to Python datetime objects
+        try:
+            datetime_from = datetime.fromisoformat(datetime_from_str) if datetime_from_str else None
+            datetime_to = datetime.fromisoformat(datetime_to_str) if datetime_to_str else None
+        except ValueError as e:
+            return jsonify({"error": f"Invalid datetime format: {e}"}), 400
 
+        diff: DiffDTO = gb_service.getDiffByIdTime(
+            user_token=user_token,
+            repo_id=repo_id,
+            branch_from=branch_from,
+            branch_to=branch_to,
+            datetime_from=datetime_from,
+            datetime_to=datetime_to
+        )
+
+        # Pydantic's .model_dump() will automatically convert
+        # Python datetime objects into ISO 8601 strings
         diff_dict = diff.model_dump()
-        return jsonify(diff_dict) 
-
+        return jsonify(diff_dict)
 
 
 
