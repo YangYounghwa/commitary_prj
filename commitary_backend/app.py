@@ -233,6 +233,9 @@ def create_app():
         datetime_from_str = request.args.get('datetime_from')
         datetime_to_str = request.args.get('datetime_to')
 
+        print(branch_from + " to " +branch_to)
+        print("datetime from : " + datetime_from_str + " to : " + datetime_to_str)
+
         # datetime format is like this : '2023-10-27T10:30:00Z'
         # Convert the string arguments to Python datetime objects
         try:
