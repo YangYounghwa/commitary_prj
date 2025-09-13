@@ -485,7 +485,7 @@ class GithubService:
             print(f"ERROR: An unexpected error occurred: {e}")
             return None
 
-    # Debug line
+
     def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
         """
         Finds the latest commit SHA from a source branch that was merged into another
@@ -498,8 +498,8 @@ class GithubService:
         try:
             params = {
                 "sha": merged_into_branch,
+                "per_page": 50,
                 "until": target_datetime.isoformat(),
-                "per_page": 50
             }
             
             commits_endpoint = f"/repos/{owner}/{repo}/commits"
@@ -508,11 +508,11 @@ class GithubService:
             while True:
                 params['page'] = page
                 # Debug line
-                print(f"DEBUG: Fetching page {page} of commits for branch '{merged_into_branch}'")
+                print(f"DEBUG: Fetching page {page} of commits for branch '{merged_into_branch}' with until={target_datetime.isoformat()}")
                 commits_data = self._make_request("GET", commits_endpoint, token, params=params)
                 
                 if not commits_data:
-                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}'.")
+                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}' within the specified time frame.")
                     break
                 
                 for commit in commits_data:
@@ -521,13 +521,14 @@ class GithubService:
                     if len(commit['parents']) > 1:
                         # Debug line
                         print(f"DEBUG: Found potential merge commit: {commit['sha']}")
-                        parent_shas = [p['sha'] for p in commit['parents']]
-                        
-                        source_branch_latest_sha = self._get_sha_by_datetime(token, owner, repo, source_branch, target_datetime)
-                        
-                        if source_branch_latest_sha and source_branch_latest_sha in parent_shas:
-                            print(f"DEBUG: Confirmed merge commit '{commit['sha']}' for branch '{source_branch}'.")
-                            return commit['parents'][1]['sha']
+                        # Check if the commit message contains the source branch name
+                        commit_message = commit['commit']['message']
+                        # A more robust check might involve comparing the second parent of the merge commit
+                        # with the latest commit on the source branch.
+                        if f"from {source_branch}" in commit_message or f"Merge branch '{source_branch}'" in commit_message:
+                            print(f"DEBUG: Confirmed merge commit '{commit['sha']}' for branch '{source_branch}' based on message.")
+                            if len(commit['parents']) > 1:
+                                return commit['parents'][1]['sha']
 
                 if len(commits_data) < 50:
                     # Debug line
@@ -593,7 +594,7 @@ class GithubService:
             shaBefore = self._get_first_commit_sha(user_token, owner, repo_name, branch_from)
             
         # Fallback logic for `shaAfter`
-        if not shaAfter:
+        if not shaAfter and branch_to != default_merged_branch:
             # Debug line
             print(f"DEBUG: Direct lookup failed for branch '{branch_to}' at '{datetime_to}'. Attempting to find merge commit.")
             shaAfter = self._get_sha_by_datetime_after_merge(
