@@ -1,4 +1,5 @@
 
+import json
 from dotenv import load_dotenv
 from commitary_backend.app import create_app
 import pytest
@@ -76,7 +77,7 @@ def test_branches_success(client):
     print("Full JSON response:")
     print(json_data)
 
-@pytest.mark.skip(reason="Kinda works.")
+
 def test_get_diff_success(client):
     """
     Test the /diff endpoint with valid ISO 8601 datetime strings.
@@ -109,7 +110,7 @@ def test_get_diff_success(client):
     
     # Print the entire JSON data for debugging
     print("Full JSON response:")
-    print(json_data)
+    # print(json_data)
     
     # Assertions to validate the JSON data structure and content
     # assert isinstance(json_data, dict)
@@ -122,6 +123,15 @@ def test_get_diff_success(client):
     # assert "filename" in first_file
     # assert response.status_code == 200
     # assert first_file.get("filename") == "src/main.py"
+
+    # Specify the filename
+    filename = "my_data.json"
+
+    # Open the file in write mode ('w') and use json.dump() to save the data
+    with open(filename, 'w') as json_file:
+        json.dump(json_data, json_file, indent=4) # indent for pretty-printing
+
+    print(f"Data successfully saved to {filename}")
 
 
 @pytest.mark.skip(reason="Kinda works.")
