@@ -236,14 +236,23 @@ def create_app():
         print(branch_from + " to " +branch_to)
         print("datetime from : " + datetime_from_str + " to : " + datetime_to_str)
 
-        # datetime format is like this : '2023-10-27T10:30:00Z'
-        # Convert the string arguments to Python datetime objects
+        # Initialize variables before the try block to avoid UnboundLocalError
+        datetime_from = None
+        datetime_to = None
+
         try:
-            datetime_from = datetime.fromisoformat(datetime_from_str) if datetime_from_str else None
-            datetime_to = datetime.fromisoformat(datetime_to_str) if datetime_to_str else None
+            # Check for and handle the 'Z' (UTC) suffix for older Python versions
+            if datetime_from_str and datetime_from_str.endswith('Z'):
+                datetime_from = datetime.fromisoformat(datetime_from_str[:-1] + '+00:00')
+            elif datetime_from_str:
+                datetime_from = datetime.fromisoformat(datetime_from_str)
+
+            if datetime_to_str and datetime_to_str.endswith('Z'):
+                datetime_to = datetime.fromisoformat(datetime_to_str[:-1] + '+00:00')
+            elif datetime_to_str:
+                datetime_to = datetime.fromisoformat(datetime_to_str)
         except ValueError as e:
-            print(e)
-            print(f"{datetime_from_str}\n{datetime_to_str}\n{datetime_from}\n{datetime_to}")
+            # The exception handling correctly returns a 400 error
             return jsonify({"error": f"Invalid datetime format: {e}"}), 400
 
         diff: DiffDTO = gb_service.getDiffByIdTime(
