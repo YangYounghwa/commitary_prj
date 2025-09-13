@@ -90,7 +90,7 @@ def test_get_diff_success(client):
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_from': 'reafctor/db_statistics',
+        'branch_from': 'refactor/db_statistics',
         'branch_to': 'main',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str
@@ -123,7 +123,7 @@ def test_get_diff_success(client):
 
 
 
-    
+
 @pytest.mark.skip(reason="Checked.")
 def test_get_diff_invalid_datetime_failure(client):
     """
