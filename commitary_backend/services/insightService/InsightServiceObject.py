@@ -1,9 +1,9 @@
 import os
 from typing import List, Optional
 import psycopg2
-from ..githubService.GithubServiceObject import gb_service
-from ...dto.insightDTO import DailyInsightDTO, InsightItemDTO
-from ...dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, CommitListDTO, DiffDTO
+from commitary_backend.services.githubService.GithubServiceObject import gb_service
+from commitary_backend.dto.insightDTO import DailyInsightDTO, InsightItemDTO
+from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, CommitListDTO, DiffDTO
 
 from datetime import date, datetime
 

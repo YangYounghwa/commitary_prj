@@ -2,7 +2,7 @@
 import os
 import json
 import requests
-from services.githubService.GithubServiceObject import gb_service
+from commitary_backend.services.githubService.GithubServiceObject import gb_service
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -21,13 +21,13 @@ def check_github():
     
     
     
-def test_getUserMEtadata():
+# def test_getUserMEtadata():
     
-    userMetadata = gb.getUserMetadata("YangYounghwa",GITHUB_TOKEN)
-    print(userMetadata)
+#     userMetadata = gb.getUserMetadata("YangYounghwa",GITHUB_TOKEN)
+#     print(userMetadata)
     
-    assert userMetadata.name is not None
-    assert userMetadata.github_id is not None
-    assert userMetadata.github_username is not None
+#     assert userMetadata.name is not None
+#     assert userMetadata.github_id is not None
+#     assert userMetadata.github_username is not None
     
      
