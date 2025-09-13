@@ -112,63 +112,96 @@ class GithubService:
             
         return BranchListDTO(branchList=branch_list)
 
-    def getCommitMsgs(self, user: str, token: str, owner: str, repo: str, branch: str, startdatetime: datetime, enddatetime: datetime) -> CommitListDTO:
-        '''
-        Returns a list of commit messages for a given branch within a time range using GraphQL for efficiency.
-        '''
-        # 코드 변경량(additions, deletions)을 함께 가져오기 위해 GraphQL 쿼리 사용
+    def getCommitMsgs(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
+        """
+        Returns a list of commit messages for a given branch within a time range.
+        Finds the repository by its ID before making the API call.
+        """
+        # Debug line
+        print(f"DEBUG: Starting getCommitMsgs with repo_id: {repo_id}")
+        repo_dto = self.getSingleRepoByID(token, repo_id)
+        if not repo_dto:
+            print(f"Warning: Repository with ID {repo_id} not found.")
+            return CommitListDTO(commitList=[])
+
+        owner = repo_dto.github_owner_login
+        repo = repo_dto.github_name
+        
+        # Debug line
+        print(f"DEBUG: Found owner: {owner} and repo: {repo} for repo_id: {repo_id}")
+
+        # Use a try-except block to handle potential errors from datetime conversion
+        try:
+            # Assuming datetime strings might not have the timezone 'Z' suffix, 
+            # add a default for robust parsing.
+            start_dt = datetime.fromisoformat(startdatetime.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(enddatetime.replace('Z', '+00:00'))
+        except ValueError as e:
+            print(f"ERROR: Invalid datetime format. {e}")
+            return CommitListDTO(commitList=[])
+
+        # GraphQL query to fetch commit history
         COMMIT_HISTORY_QUERY = """
         query GetCommitHistory($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp!, $until: GitTimestamp!) {
-          repository(owner: $owner, name: $repo) {
+        repository(owner: $owner, name: $repo) {
             ref(qualifiedName: $branch) {
-              target {
+            target {
                 ... on Commit {
-                  history(since: $since, until: $until) {
+                history(since: $since, until: $until) {
                     nodes {
-                      sha
-                      author {
+                    oid
+                    author {
                         name
                         email
                         user {
-                          id
+                        id
                         }
-                      }
-                      committedDate
-                      additions
-                      deletions
                     }
-                  }
+                    committedDate
+                    message
+                    }
                 }
-              }
+                }
             }
-          }
+            }
+        }
         }
         """
         variables = {
             "owner": owner,
             "repo": repo,
             "branch": branch,
-            "since": startdatetime.isoformat(),
-            "until": enddatetime.isoformat()
+            "since": start_dt.isoformat(),
+            "until": end_dt.isoformat()
         }
         
-        commits_data = self._execute_graphql(COMMIT_HISTORY_QUERY, variables, token)
+        # Debug line
+        print(f"DEBUG: Executing GraphQL query for commits on branch: {branch}")
+        try:
+            commits_data = self._execute_graphql(COMMIT_HISTORY_QUERY, variables, token)
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GraphQL request failed: {e}")
+            return CommitListDTO(commitList=[])
+
         commit_nodes = commits_data.get('data', {}).get('repository', {}).get('ref', {}).get('target', {}).get('history', {}).get('nodes', [])
 
-        commit_list = [CommitMDDTO(
-            sha=commit['sha'],
-            repo_name=repo,
-            repo_id=0,
-            owner_name=owner,
-            branch_sha=branch,
-            author_github_id=commit.get('author', {}).get('user', {}).get('id') if commit.get('author', {}).get('user') else None,
-            author_name=commit.get('author', {}).get('name'),
-            author_email=commit.get('author', {}).get('email'),
-            commit_datetime=datetime.fromisoformat(commit['committedDate'].replace('Z', '+00:00')),
-            additions=commit.get('additions'),
-            deletions=commit.get('deletions')
-        ) for commit in commit_nodes]
+        commit_list = [
+            CommitMDDTO(
+                sha=commit['oid'],
+                repo_name=repo,
+                repo_id=repo_id,
+                owner_name=owner,
+                branch_sha=branch,
+                author_github_id=commit.get('author', {}).get('user', {}).get('id') if commit.get('author', {}).get('user') else None,
+                author_name=commit.get('author', {}).get('name'),
+                author_email=commit.get('author', {}).get('email'),
+                commit_datetime=datetime.fromisoformat(commit['committedDate'].replace('Z', '+00:00')),
+                commit_msg=commit['message']  # Added this field back
+            ) for commit in commit_nodes
+        ]
         
+        # Debug line
+        print(f"DEBUG: Found {len(commit_list)} commits.")
         return CommitListDTO(commitList=commit_list)
     
 

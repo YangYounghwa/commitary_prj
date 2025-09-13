@@ -172,15 +172,16 @@ def create_app():
 
     @app.route("/githubCommits")
     def getCommits():
-        user_name = request.args.get('user')
+
         user_token = request.args.get('token')
-        commitary_id = request.args.get('commitary_id')
+  
         startdatetime = request.args.get('datetime_from')
         enddatetime = request.args.get('datetime_to')
         branch = request.args.get('branch_name')
+        repo_id = request.args.get('repo_id')
 
 
-        commits_dto:CommitListDTO =  gb_service.getCommitMsgs(token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime,commitary_id=commitary_id)
+        commits_dto:CommitListDTO =  gb_service.getCommitMsgs(repo_id=repo_id,token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime)
         commits_dict:dict = commits_dto.model_dump()
         return jsonify(commits_dict)
 

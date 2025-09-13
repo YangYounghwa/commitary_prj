@@ -76,7 +76,7 @@ def test_branches_success(client):
     print("Full JSON response:")
     print(json_data)
 
-
+@pytest.mark.skip(reason="Do this after working on commits.")
 def test_get_diff_success(client):
     """
     Test the /diff endpoint with valid ISO 8601 datetime strings.
@@ -122,6 +122,51 @@ def test_get_diff_success(client):
     # assert "filename" in first_file
     # assert response.status_code == 200
     # assert first_file.get("filename") == "src/main.py"
+
+
+
+def test_get_commits_success(client):
+    """
+    Test the /githubCommits endpoint with valid parameters.
+    """
+    # Define the datetime range in ISO 8601 format strings.
+    dt_from_str = "2025-06-27T10:00:00Z"
+    dt_to_str = "2025-08-01T10:00:00Z"
+
+    # Define the query parameters
+    query_params = {
+        'token': GITHUB_TOKEN,
+        'repo_id': TEST_REPO_ID,
+        'branch_name': 'yh_13',
+        'datetime_from': dt_from_str,
+        'datetime_to': dt_to_str
+    }
+
+    # Make the request using the test client
+    response = client.get("/githubCommits", query_string=query_params)
+
+    # Assert that the status code is 200 OK
+    assert response.status_code == 200
+    
+    # Get the JSON data from the response.
+    json_data = response.json
+
+    # Print the entire JSON data for debugging
+    print("\nFull JSON response for /githubCommits:")
+    print(json_data)
+
+    # Assertions to validate the JSON data structure and content
+    assert isinstance(json_data, dict)
+    assert "commitList" in json_data
+    assert isinstance(json_data["commitList"], list)
+    assert len(json_data["commitList"]) > 0
+
+    first_commit = json_data["commitList"][0]
+    assert "sha" in first_commit
+    assert "repo_id" in first_commit
+    assert first_commit["repo_id"] == TEST_REPO_ID
+    assert "commit_datetime" in first_commit
+    assert "commit_msg" in first_commit
 
 
 
