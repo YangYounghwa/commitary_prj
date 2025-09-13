@@ -102,6 +102,9 @@ def create_app():
         """
         user_token = request.args.get('token')
         userinfo = None
+        if current_app.config.get("TESTING"): # type: ignore
+            print("token : ")
+            print(user_token)    
 
         # Step 1: Get user metadata from GitHub
         user_gb_info: UserGBInfoDTO = gb_service.getUserMetadata(user=None, token=user_token)
@@ -157,6 +160,8 @@ def create_app():
             print("Repos dict : ")
             print(repos_dict)
         return jsonify(repos_dict)
+
+
 
     @app.route("/githubCommits")
     def getCommits():

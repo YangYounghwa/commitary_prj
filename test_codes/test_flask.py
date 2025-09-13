@@ -9,7 +9,7 @@ import os
 load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "YOUR_PERSONAL_ACCESS_TOKEN")
 
-
+# @pytest.mark.skip(reason="Do it later")
 @pytest.fixture
 def app_run():
     app = create_app()
@@ -21,6 +21,7 @@ def app_run():
     yield app
 
 
+# @pytest.mark.skip(reason="Do it later")
 @pytest.fixture
 def client(app_run):
     # This calls the test client on the app created by the 'app_run' fixture.
@@ -40,7 +41,7 @@ def test_get_repos_success(client):
     response = client.get("/repos", query_string={'user': 'YangYounghwa', 'token': GITHUB_TOKEN})
     print(response)
 
-
+# @pytest.mark.skip(reason="Do it later")
 def test_user_success(client):
     # The 'client' fixture is passed to this test function, which automatically
     # provides the corrected test client instance.
