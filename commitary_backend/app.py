@@ -326,6 +326,7 @@ def create_app():
             return jsonify(RepoListDTO(repoList=repos_list).model_dump())
         
         except Exception as e:
+            print(e)
             return jsonify({"error": f"Failed to retrieve registered repositories: {e}"}), 500
   
     # has been tested. 
