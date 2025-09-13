@@ -86,7 +86,7 @@ class CommitMDDTO(BaseModel):
     # Data extracted from the commit
     commit_msg : str #  < --- ADDED 20250912
     author_github_id: int | None = Field(None, description="GitHub ID of the author (can be null).")
-    author_name : int # name of the author. (git)
+    author_name : str # name of the author. (git)
     author_email : str # email of the autor. (git)
     commit_datetime : datetime # datetime of the commit. 
 
