@@ -93,7 +93,8 @@ def test_get_diff_success(client):
         'branch_from': 'refactor/db_statistics',
         'branch_to': 'main',
         'datetime_from': dt_from_str,
-        'datetime_to': dt_to_str
+        'datetime_to': dt_to_str,
+        'default_branch': 'main'
     }
     
     # Make the request using the test client

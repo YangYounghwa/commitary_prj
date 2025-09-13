@@ -5,7 +5,7 @@ import requests
 from commitary_backend.dto.gitServiceDTO import RepoDTO, RepoListDTO, BranchDTO, BranchListDTO, UserGBInfoDTO, CommitListDTO, CommitMDDTO
 from commitary_backend.dto.gitServiceDTO import PatchFileDTO, DiffDTO
 from commitary_backend.dto.gitServiceDTO import CodeFileDTO, CodebaseDTO
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 
 class GithubService:
@@ -170,19 +170,115 @@ class GithubService:
         ) for commit in commit_nodes]
         
         return CommitListDTO(commitList=commit_list)
+    
 
-    def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> str | None:
-        """Helper function to find the latest commit SHA on a branch before a specific datetime."""
-        params = {
-            "sha": branch,
-            "until": target_datetime.isoformat(),
-            "per_page": 1
-        }
-        commits_data = self._make_request("GET", f"/repos/{owner}/{repo}/commits", token, params=params)
+    def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the latest commit SHA from a source branch that was merged into another
+        branch, before a specific datetime.
+        
+        This function searches for the merge commit on the target branch.
+        
+        :param token: GitHub Personal Access Token.
+        :param owner: The repository owner.
+        :param repo: The repository name.
+        :param merged_into_branch: The branch the source branch was merged into (e.g., 'main').
+        :param source_branch: The branch that was merged (e.g., 'feature/my-new-feature').
+        :param target_datetime: The datetime to search commits until.
+        :return: The SHA of the commit from the source branch, or None if not found.
+        """
+        try:
+            # A merge commit usually has a message like "Merge pull request #<number> from <source_branch>"
+            # or "Merge branch '<source_branch>' into '<target_branch>'".
+            # We can use this pattern to filter.
+            merge_commit_message_pattern = f"Merge pull request from {source_branch}"
+            
+            params = {
+                "sha": merged_into_branch,
+                "until": target_datetime.isoformat(),
+                "per_page": 50  # We need to look through more than one commit.
+            }
+            
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            
+            # Use a loop to handle pagination, as the merge commit might not be in the first page.
+            # This is a simplified example, a full implementation would need proper pagination.
+            page = 1
+            while True:
+                params['page'] = page
+                commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+                
+                if not commits_data:
+                    # No more commits to fetch
+                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}'.")
+                    break
+                
+                for commit in commits_data:
+                    # A merge commit has more than one parent
+                    if len(commit['parents']) > 1:
+                        commit_message = commit['commit']['message']
+                        # Check if the commit message contains the source branch name
+                        # Note: This is a fragile check. A more robust solution might use
+                        # a dedicated API endpoint or more sophisticated parent analysis.
+                        if source_branch in commit_message:
+                            print(f"DEBUG: Found merge commit '{commit['sha']}' for branch '{source_branch}'.")
+                            
+                            # The second parent of the merge commit is the head of the merged branch.
+                            # This is a common convention but can vary.
+                            if len(commit['parents']) > 1:
+                                return commit['parents'][1]['sha']
 
-        if commits_data:
-            return commits_data[0]['sha']
-        return None
+                # If we went through a full page and didn't find the commit, get the next page.
+                if len(commits_data) < 50:
+                    break
+                page += 1
+
+            print(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None 
+
+
+    def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the latest commit SHA on a branch before a specific datetime.
+        
+        This function uses a simple approach: it queries the GitHub API for the latest
+        commit up to the target_datetime.
+        """
+        try:
+            params = {
+                "sha": branch,
+                "until": target_datetime.isoformat(),
+                "per_page": 1
+            }
+            
+            # Use a more descriptive endpoint name
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            
+            # This assumes _make_request handles the full URL and headers
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+
+            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
+                return commits_data[0]['sha']
+            
+            # If the list is empty, it means no commit was found before the datetime.
+            print(f"DEBUG: No commit found on branch '{branch}' for datetime '{target_datetime.isoformat()}'.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None
 
     def getDiffByTime(self, user: str, token: str, owner: str, repo: str, branch: str, beforeDatetime: datetime, afterDatetime: datetime) -> DiffDTO | None:
         """
@@ -349,25 +445,53 @@ class GithubService:
             ))
             
         return BranchListDTO(branchList=branch_list)
-        
-    def getDiffByIdTime(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
-                       datetime_from: datetime, datetime_to: datetime) -> DiffDTO | None:
+    
+
+
+
+    def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
+                        datetime_from: datetime, datetime_to: datetime,
+                        default_merged_branch: str = 'main') -> Optional[DiffDTO]:
         """
         Returns the difference between two points in time on two (potentially different) branches,
-        identified by a repository ID.
+        identified by a repository ID. Includes a fallback to find merged commits.
+        
+        :param user_token: The user's GitHub access token.
+        :param repo_id: The ID of the repository.
+        :param branch_from: The name of the 'from' branch.
+        :param branch_to: The name of the 'to' branch.
+        :param datetime_from: The datetime for the 'from' point.
+        :param datetime_to: The datetime for the 'to' point.
+        :param default_merged_branch: The branch to check for merge commits if the others are not found.
+        :return: A DiffDTO object or None.
         """
         repo_dto = self.getSingleRepoByID(user_token, repo_id)
         if not repo_dto:
+            print("Error: Repository not found.")
             return None
 
         owner = repo_dto.github_owner_login
         repo_name = repo_dto.github_name
 
+        # Attempt to find SHAs directly from the branches
         shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         shaAfter = self._get_sha_by_datetime(user_token, owner, repo_name, branch_to, datetime_to)
 
+        # Fallback logic if the direct lookup fails
+        if not shaBefore:
+            print(f"Warning: Direct lookup failed for branch '{branch_from}'. Attempting to find merge commit.")
+            shaBefore = self._get_sha_by_datetime_after_merge(
+                user_token, owner, repo_name, default_merged_branch, branch_from, datetime_from
+            )
+            
+        if not shaAfter:
+            print(f"Warning: Direct lookup failed for branch '{branch_to}'. Attempting to find merge commit.")
+            shaAfter = self._get_sha_by_datetime_after_merge(
+                user_token, owner, repo_name, default_merged_branch, branch_to, datetime_to
+            )
+
         if not shaBefore or not shaAfter:
-            print("Warning: Could not find commits for one or both of the given datetimes.")
+            print("Warning: Could not find commits for one or both of the given datetimes, even with fallback.")
             return None
 
         if shaBefore == shaAfter:
@@ -387,9 +511,10 @@ class GithubService:
         diff_dto = self.getDiffBySHA("user_placeholder", user_token, owner, repo_name, shaBefore, shaAfter)
         
         # Manually update the repo_id in the returned DTO
-        diff_dto.repo_id = repo_id
-        diff_dto.branch_before = branch_from
-        diff_dto.branch_after = branch_to
+        if diff_dto:
+            diff_dto.repo_id = repo_id
+            diff_dto.branch_before = branch_from
+            diff_dto.branch_after = branch_to
         
         return diff_dto
     

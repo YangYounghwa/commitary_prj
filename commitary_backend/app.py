@@ -226,51 +226,58 @@ def create_app():
 
     @app.route("/diff", methods=['GET'])
     def getDiff():
+        """
+        Handles a GET request to compare two points in time on different branches.
+        """
         repo_id = request.args.get('repo_id')
         user_token = request.args.get('token')
         branch_from = request.args.get('branch_from')
         branch_to = request.args.get('branch_to')
         datetime_from_str = request.args.get('datetime_from')
         datetime_to_str = request.args.get('datetime_to')
+        
+        # Get the default_branch argument with a default value of 'main'
+        default_branch = request.args.get('default_branch', 'main')
 
-        print(branch_from + " to " +branch_to)
-        print("datetime from : " + datetime_from_str + " to : " + datetime_to_str)
-
-        # Initialize variables before the try block to avoid UnboundLocalError
-        datetime_from = None
-        datetime_to = None
+        # Basic input validation and type conversion
+        if not all([repo_id, user_token, branch_from, branch_to, datetime_from_str, datetime_to_str]):
+            return "Missing one or more required parameters.", 400
 
         try:
-            # Check for and handle the 'Z' (UTC) suffix for older Python versions
-            if datetime_from_str and datetime_from_str.endswith('Z'):
-                datetime_from = datetime.fromisoformat(datetime_from_str[:-1] + '+00:00')
-            elif datetime_from_str:
-                datetime_from = datetime.fromisoformat(datetime_from_str)
+            repo_id = int(repo_id)
+            datetime_from = datetime.fromisoformat(datetime_from_str)
+            datetime_to = datetime.fromisoformat(datetime_to_str)
+        except (ValueError, TypeError):
+            return "Invalid parameter type. Datetime must be in ISO format and repo_id must be an integer.", 400
 
-            if datetime_to_str and datetime_to_str.endswith('Z'):
-                datetime_to = datetime.fromisoformat(datetime_to_str[:-1] + '+00:00')
-            elif datetime_to_str:
-                datetime_to = datetime.fromisoformat(datetime_to_str)
-        except ValueError as e:
-            # The exception handling correctly returns a 400 error
-            return jsonify({"error": f"Invalid datetime format: {e}"}), 400
-
-        diff: DiffDTO = gb_service.getDiffByIdTime(
+        # Assuming 'api_service' is an instance of YourApiService
+        
+        
+        # Call the core logic function with all the arguments, including the default_branch
+        # Note: You will need to update your `getDiffByIdTime` to accept `default_branch`.
+        diff_dto = gb_service.getDiffByIdTime(
             user_token=user_token,
             repo_id=repo_id,
             branch_from=branch_from,
             branch_to=branch_to,
             datetime_from=datetime_from,
-            datetime_to=datetime_to
+            datetime_to=datetime_to,
+            default_merged_branch=default_branch
         )
 
         # Pydantic's .model_dump() will automatically convert
         # Python datetime objects into ISO 8601 strings
-        diff_dict = diff.model_dump()
 
-        # Debug Line
-        print(diff.model_dump_json())
-        return jsonify(diff_dict)
+        if diff_dto:
+            diff_dict = diff_dto.model_dump()
+
+            # Debug Line
+            print(diff_dto.model_dump_json())
+            return jsonify(diff_dict)
+
+        else:
+            return "Failed to get the diff. See server logs for details.", 500
+
 
 
 
