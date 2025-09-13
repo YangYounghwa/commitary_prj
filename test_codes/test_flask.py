@@ -83,8 +83,8 @@ def test_get_diff_success(client):
     """
     # Define the datetime range in ISO 8601 format strings.
     # The 'Z' indicates UTC time, which is a best practice.
-    dt_from_str = "2025-07-10T10:00:00Z"
-    dt_to_str = "2025-08-27T10:00:00Z"
+    dt_from_str = "2025-06-20T10:00:00Z"
+    dt_to_str = "2025-07-05T10:00:00Z"
     
     # Define the query parameters
     query_params = {
