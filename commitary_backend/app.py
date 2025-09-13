@@ -163,7 +163,7 @@ def create_app():
         
         repos_dict = repos_dto.model_dump() 
 
-        if current_app.config.get("TESTING"): # type: ignore
+        if app.config.get("TESTING"): # type: ignore
             print("Repos dict : ")
             print(repos_dict)
         return jsonify(repos_dict)
