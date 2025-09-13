@@ -1,6 +1,6 @@
-from ..dto.gitServiceDTO import *
-from ..dto.insightDTO import *
-from ..dto.UserDTO import *
+from commitary_backend.dto.gitServiceDTO import *
+from commitary_backend.dto.insightDTO import *
+from commitary_backend.dto.UserDTO import *
 from typing import List, Dict
 
 

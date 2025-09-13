@@ -3,14 +3,13 @@ from urllib.parse import urlparse
 import requests
 import json
 from datetime import datetime, timedelta, timezone
-from dto.UserDTO import UserInfoDTO
+from commitary_backend.dto.UserDTO import UserInfoDTO
 from flask import Flask, jsonify, request, redirect, url_for, session, render_template
 from dotenv import load_dotenv
 from psycopg2 import pool
 
-from services.githubService.GithubServiceObject import gb_service
-
-from dto.gitServiceDTO import BranchListDTO, DiffDTO, RepoDTO, UserGBInfoDTO
+from commitary_backend.services.githubService.GithubServiceObject import gb_service
+from commitary_backend.dto.gitServiceDTO import BranchListDTO, DiffDTO, RepoDTO, UserGBInfoDTO
 
 import psycopg2
 
@@ -30,54 +29,7 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 
 
-# Vector DB table
-'''CREATE TYPE enum_type AS ENUM ('codebase', 'patch', 'externaldoc');
-CREATE TABLE IF NOT EXISTS vector_data (
-    id TEXT PRIMARY KEY,
-    embedding VECTOR(1536) NOT NULL,
-    metadata_commitary_user BIGINT,
-    metadata_repo_name TEXT,
-    metadata_repo_id BIGINT,
-    metadata_target_branch TEXT,
-    metadata_filepath TEXT,
-    metadata_type enum_type,
-    metadata_lastModifiedTime TIMESTAMPTZ
-);
-'''
 
-# User table.
-'''
-CREATE TABLE IF NOT EXISTS "emailList" (
-    email_key SERIAL PRIMARY KEY,
-    email TEXT UNIQUE,
-    commitary_id BIGINT
-);
-
-CREATE TABLE IF NOT EXISTS "UserInfo" (
-    commitary_id BIGINT PRIMARY KEY,
-    github_id BIGINT,
-    github_name TEXT,
-    emailList_key INTEGER REFERENCES "emailList"(email_key),
-    defaultEmail TEXT,
-    github_url TEXT,
-    github_html_url TEXT
-);
-
-CREATE TABLE IF NOT EXISTS "repos" (
-    commitary_repo_id SERIAL PRIMARY KEY,
-    commitary_id BIGINT,
-    github_id BIGINT,
-    github_name TEXT,
-    github_owner_id BIGINT,
-    github_owner_login TEXT,
-    github_html_url TEXT,
-    github_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE,
-    updated_at TIMESTAMP WITH TIME ZONE,
-    pushed_at TIMESTAMP WITH TIME ZONE
-);
-
-'''    
 
 # Db connection should be used with pool for multiple api calls.
 # def get_db_connection():
@@ -118,7 +70,7 @@ def create_db_pool():
         db_pool = None
 
 
-from commitaryUtils.dbConnectionDecorator import with_db_connection
+from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
 
 # Global variable for the connection pool
@@ -238,7 +190,7 @@ def deleteRegisteredRepo():
 
     return
 
-@app.route("/branchs",meethods=['GET'])
+@app.route("/branchs",methods=['GET'])
 def getBranchs():
     repo_id = request.args.get('repo_id')
     user_token = request.args.get('token')
@@ -260,9 +212,9 @@ def getDiff():
   
     
     diff:DiffDTO
-    # diff: DiffDTO  = gb_service.getDiffByIdTime(user_token = user_token, repo_id=repo_id,
-    #                                             branch_from = branch_from, branch_to = branch_to, 
-    #                                             datetime_from= datetime_from, datetime_to = datetime_to)
+    diff: DiffDTO  = gb_service.getDiffByIdTime(user_token = user_token, repo_id=repo_id,
+                                                branch_from = branch_from, branch_to = branch_to, 
+                                                datetime_from= datetime_from, datetime_to = datetime_to)
     # TODO : create getDiffByIdTime
 
     diff_dict = diff.model_dump()

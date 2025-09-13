@@ -2,9 +2,9 @@ import os
 from time import sleep
 from pydantic import ValidationError
 import requests
-from dto.gitServiceDTO import RepoDTO, RepoListDTO, BranchDTO, BranchListDTO, UserGBInfoDTO, CommitListDTO, CommitMDDTO
-from dto.gitServiceDTO import PatchFileDTO, DiffDTO
-from dto.gitServiceDTO import CodeFileDTO, CodebaseDTO
+from commitary_backend.dto.gitServiceDTO import RepoDTO, RepoListDTO, BranchDTO, BranchListDTO, UserGBInfoDTO, CommitListDTO, CommitMDDTO
+from commitary_backend.dto.gitServiceDTO import PatchFileDTO, DiffDTO
+from commitary_backend.dto.gitServiceDTO import CodeFileDTO, CodebaseDTO
 from typing import List, Dict
 from datetime import datetime
 
@@ -43,10 +43,6 @@ class GithubService:
         response.raise_for_status()
         return response.json()
 
-    # --- 🔽 1. 수정된 함수 🔽 ---
-    # TODO : UserGBInfoDTO updated, must be updated as well
-    
-    
     def getUserMetadata(self, user: str, token: str) -> UserGBInfoDTO:
         """
         Fetches metadata for the authenticated user from GitHub.
@@ -69,8 +65,8 @@ class GithubService:
             github_html_url=user_data.get('html_url'),
 
             # --- DTO에 포함된 다른 선택적 필드들 ---
-            bio=user_data.get('bio'),
-            company=user_data.get('company')
+            # bio=user_data.get('bio'),
+            # company=user_data.get('company')
         )
 
 
@@ -116,8 +112,6 @@ class GithubService:
             
         return BranchListDTO(branchList=branch_list)
 
-    # --- 🔽 2. 수정된 함수 🔽 ---
-    # TODO : CommitListDTO updated, must update as well.
     def getCommitMsgs(self, user: str, token: str, owner: str, repo: str, branch: str, startdatetime: datetime, enddatetime: datetime) -> CommitListDTO:
         '''
         Returns a list of commit messages for a given branch within a time range using GraphQL for efficiency.
@@ -298,6 +292,106 @@ class GithubService:
         '''
         expression = f"{sha}:"
         return self._fetch_codebase_snapshot(owner, repo, token, expression)
+
+
+
+
+
+    # ----- Added 20250913
+    def getSingleRepoByID(self, token: str, repo_id: int) -> RepoDTO:
+        """
+        Fetches a single repository by its GitHub ID.
+        """
+        try:
+            repo_data = self._make_request("GET", f"/repositories/{repo_id}", token)
+            return RepoDTO(
+                github_id=repo_data['id'],
+                github_node_id=repo_data['node_id'],
+                github_name=repo_data['name'],
+                github_owner_id=repo_data['owner']['id'],
+                github_owner_login=repo_data['owner']['login'],
+                github_html_url=repo_data['html_url'],
+                github_url=repo_data['url'],
+                github_full_name=repo_data['full_name'],
+                description=repo_data.get('description')
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"Warning: Repository with ID {repo_id} not found.")
+                return None
+            raise
+    
+    def getBranchesByRepoId(self, user: str, token: str, repo_id: int) -> BranchListDTO:
+        """
+        Returns a list of branches for a given repository ID.
+        """
+        repo_dto = self.getSingleRepoByID(token, repo_id)
+        if not repo_dto:
+            return BranchListDTO(branchList=[])
+
+        owner = repo_dto.github_owner_login
+        repo_name = repo_dto.github_name
+        
+        branches_data = self._make_request("GET", f"/repos/{owner}/{repo_name}/branches", token)
+        
+        branch_list = []
+        for branch in branches_data:
+            commit_sha = branch['commit']['sha']
+            commit_data = self._make_request("GET", f"/repos/{owner}/{repo_name}/commits/{commit_sha}", token)
+            last_modification_str = commit_data['commit']['author']['date']
+            
+            branch_list.append(BranchDTO(
+                repo_id=repo_id, 
+                repo_name=repo_name,
+                owner_name=owner,
+                branch_name=branch['name'],
+                last_modification=datetime.fromisoformat(last_modification_str.replace('Z', '+00:00'))
+            ))
+            
+        return BranchListDTO(branchList=branch_list)
+        
+    def getDiffByIdTime(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
+                       datetime_from: datetime, datetime_to: datetime) -> DiffDTO | None:
+        """
+        Returns the difference between two points in time on two (potentially different) branches,
+        identified by a repository ID.
+        """
+        repo_dto = self.getSingleRepoByID(user_token, repo_id)
+        if not repo_dto:
+            return None
+
+        owner = repo_dto.github_owner_login
+        repo_name = repo_dto.github_name
+
+        shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
+        shaAfter = self._get_sha_by_datetime(user_token, owner, repo_name, branch_to, datetime_to)
+
+        if not shaBefore or not shaAfter:
+            print("Warning: Could not find commits for one or both of the given datetimes.")
+            return None
+
+        if shaBefore == shaAfter:
+            print("Warning: The commits at both times are the same. No difference.")
+            return DiffDTO(
+                repo_name=repo_name,
+                repo_id=repo_id,
+                owner_name=owner,
+                branch_before=branch_from,
+                branch_after=branch_to,
+                commit_before_sha=shaBefore,
+                commit_after_sha=shaAfter,
+                files=[]
+            )
+
+        # Re-use existing getDiffBySHA method
+        diff_dto = self.getDiffBySHA("user_placeholder", user_token, owner, repo_name, shaBefore, shaAfter)
+        
+        # Manually update the repo_id in the returned DTO
+        diff_dto.repo_id = repo_id
+        diff_dto.branch_before = branch_from
+        diff_dto.branch_after = branch_to
+        
+        return diff_dto
 
 # Singleton instance
 gb_service = GithubService()
