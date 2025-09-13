@@ -600,6 +600,29 @@ class GithubService:
         except Exception as e:
             print(f"ERROR: An unexpected error occurred: {e}")
             return None
+        
+
+    def _get_first_commit_sha_after_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the first commit SHA on a branch after a specific datetime.
+        """
+        try:
+            params = {
+                "sha": branch,
+                "since": target_datetime.isoformat(),
+                "per_page": 1,
+                "direction": "asc" # Note: GitHub API might not support this directly with `since`
+            }
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+
+            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
+                return commits_data[0]['sha']
+            
+            return None
+        except Exception as e:
+            print(f"Error getting first commit after datetime: {e}")
+            return None   
 
     def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
                         datetime_from: datetime, datetime_to: datetime,
@@ -628,7 +651,7 @@ class GithubService:
         print(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
 
         # Determine shaBefore
-        shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
+        shaBefore = shaBefore = self._get_first_commit_sha_after_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         if not shaBefore:
             print(f"DEBUG: No commit found on branch '{branch_from}' before '{datetime_from}'. Falling back to the first commit.")
             shaBefore = self._get_first_commit_sha(user_token, owner, repo_name, branch_from)
