@@ -150,7 +150,12 @@ def create_app():
         user_token = request.args.get('token')
 
         repos_dto = gb_service.getRepos(user=user_name,token=user_token)
+        
         repos_dict = repos_dto.model_dump() 
+
+        if current_app.config.get("TESTING"): # type: ignore
+            print("Repos dict : ")
+            print(repos_dict)
         return jsonify(repos_dict)
 
     @app.route("/githubCommits")

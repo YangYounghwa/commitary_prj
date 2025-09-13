@@ -47,5 +47,6 @@ def test_user_success(client):
 
     # Make the request using the test client
     response = client.get("/user", query_string={'token': GITHUB_TOKEN})
+    print("Response to '/user'")
     print(response)
-    
+
