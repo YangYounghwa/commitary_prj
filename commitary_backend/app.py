@@ -125,7 +125,7 @@ def create_app():
                 # github_url, github_html_url  is Empty for now, it will be added later.
                 with conn.cursor() as insert_cur:
                     insert_cur.execute(
-                        "INSERT INTO UserInfo (github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING commitary_id",
+                        "INSERT INTO user_info (github_id, github_name, defaultEmail, github_url, github_html_url, github_avatar_url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING commitary_id",
                         (user_gb_info.github_id, user_gb_info.github_username, None, None, None, user_gb_info.github_avatar_url)
                     )
                     new_commitary_id = insert_cur.fetchone()[0]
