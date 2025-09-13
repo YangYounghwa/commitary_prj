@@ -385,7 +385,7 @@ def create_app():
         
         
         # Call the core logic function with all the arguments, including the default_branch
-        diff_dto = gb_service.getDiffByIdTime2(
+        diff_dto = gb_service.getDiffByIdTime3(
             user_token=user_token,
             repo_id=repo_id,
             branch_from=branch_from,
