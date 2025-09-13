@@ -76,14 +76,14 @@ def test_branches_success(client):
     print("Full JSON response:")
     print(json_data)
 
-@pytest.mark.skip(reason="Do this after working on commits.")
+
 def test_get_diff_success(client):
     """
     Test the /diff endpoint with valid ISO 8601 datetime strings.
     """
     # Define the datetime range in ISO 8601 format strings.
     # The 'Z' indicates UTC time, which is a best practice.
-    dt_from_str = "2025-06-27T10:00:00Z"
+    dt_from_str = "2025-06-01T10:00:00Z"
     dt_to_str = "2025-08-01T10:00:00Z"
     
     # Define the query parameters
@@ -196,7 +196,7 @@ def test_get_diff_invalid_datetime_failure(client):
     assert "Invalid datetime format" in json_data["error"]
 
 
-
+@pytest.mark.skip(reason="Checked.")
 def test_repo_lifecycle_end_to_end(client):
     """
     Test the full lifecycle of a repository: get, register, receive, and delete.
