@@ -1,4 +1,5 @@
 import os
+import re
 from time import sleep
 from pydantic import ValidationError
 import requests
@@ -7,7 +8,6 @@ from commitary_backend.dto.gitServiceDTO import PatchFileDTO, DiffDTO
 from commitary_backend.dto.gitServiceDTO import CodeFileDTO, CodebaseDTO
 from typing import List, Dict, Optional
 from datetime import datetime
-import re
 
 class GithubService:
     '''
@@ -112,7 +112,7 @@ class GithubService:
             ))
             
         return BranchListDTO(branchList=branch_list)
-    
+
 
     def _get_original_branch_from_merge_message(self, message: str) -> Optional[str]:
         """
@@ -131,6 +131,7 @@ class GithubService:
             return match.group(1).strip()
 
         return None
+
 
     def getCommitMsgs(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
         """
@@ -211,8 +212,284 @@ class GithubService:
         # Debug line
         print(f"DEBUG: Found {len(commit_list)} commits.")
         return CommitListDTO(commitList=commit_list)
+        
 
+    def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the latest commit SHA from a source branch that was merged into another
+        branch, before a specific datetime.
+        
+        This function searches for the merge commit on the target branch.
+        
+        :param token: GitHub Personal Access Token.
+        :param owner: The repository owner.
+        :param repo: The repository name.
+        :param merged_into_branch: The branch the source branch was merged into (e.g., 'main').
+        :param source_branch: The branch that was merged (e.g., 'feature/my-new-feature').
+        :param target_datetime: The datetime to search commits until.
+        :return: The SHA of the commit from the source branch, or None if not found.
+        """
+        try:
+            # A merge commit usually has a message like "Merge pull request #<number> from <source_branch>"
+            # or "Merge branch '<source_branch>' into '<target_branch>'".
+            # We can use this pattern to filter.
+            merge_commit_message_pattern = f"Merge pull request from {source_branch}"
+            print('merge_commit_message_pattern') 
+            params = {
+                "sha": merged_into_branch,
+                "until": target_datetime.isoformat(),
+                "per_page": 50  # We need to look through more than one commit.
+            }
+            
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            
+            # Use a loop to handle pagination, as the merge commit might not be in the first page.
+            # This is a simplified example, a full implementation would need proper pagination.
+            page = 1
+            while True:
+                params['page'] = page
+                commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+                
+                if not commits_data:
+                    # No more commits to fetch
+                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}'.")
+                    break
+                
+                for commit in commits_data:
+                    # A merge commit has more than one parent
+                    if len(commit['parents']) > 1:
+                        commit_message = commit['commit']['message']
+                        # Check if the commit message contains the source branch name
+                        # Note: This is a fragile check. A more robust solution might use
+                        # a dedicated API endpoint or more sophisticated parent analysis.
+                        if source_branch in commit_message:
+                            print(f"DEBUG: Found merge commit '{commit['sha']}' for branch '{source_branch}'.")
+                            
+                            # The second parent of the merge commit is the head of the merged branch.
+                            # This is a common convention but can vary.
+                            if len(commit['parents']) > 1:
+                                return commit['parents'][1]['sha']
+
+                # If we went through a full page and didn't find the commit, get the next page.
+                if len(commits_data) < 50:
+                    break
+                page += 1
+
+            print(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None 
+
+
+    def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the latest commit SHA on a branch before a specific datetime.
+        
+        This function uses a simple approach: it queries the GitHub API for the latest
+        commit up to the target_datetime.
+        """
+        try:
+            params = {
+                "sha": branch,
+                "until": target_datetime.isoformat(),
+                "per_page": 1
+            }
+            
+            # Use a more descriptive endpoint name
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            
+            # This assumes _make_request handles the full URL and headers
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+
+            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
+                return commits_data[0]['sha']
+            
+            # If the list is empty, it means no commit was found before the datetime.
+            print(f"DEBUG: No commit found on branch '{branch}' for datetime '{target_datetime.isoformat()}'.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None
+
+    def getDiffByTime(self, user: str, token: str, owner: str, repo: str, branch: str, beforeDatetime: datetime, afterDatetime: datetime) -> DiffDTO | None:
+        """
+        Difference between two points in time on a given branch.
+        Finds the latest commits before 'beforeDatetime' and 'afterDatetime' and compares them.
+        """
+        shaBefore = self._get_sha_by_datetime(token, owner, repo, branch, beforeDatetime)
+        shaAfter = self._get_sha_by_datetime(token, owner, repo, branch, afterDatetime)
+
+        if not shaBefore or not shaAfter:
+            print("Warning: Could not find commits for one or both of the given datetimes.")
+            return None
+
+        if shaBefore == shaAfter:
+            print("Warning: The commits at both times are the same. No difference.")
+            return DiffDTO(
+                repo_name=repo,
+                repo_id=0,
+                owner_name=owner,
+                branch_before=branch,
+                branch_after=branch,
+                commit_before_sha=shaBefore,
+                commit_after_sha=shaAfter,
+                files=[]
+            )
+
+        return self.getDiffBySHA(user, token, owner, repo, shaBefore, shaAfter)
+
+    def getDiffBySHA(self, user: str, token: str, owner: str, repo: str, shaBefore: str, shaAfter: str) -> DiffDTO:
+        '''
+        Difference between two commits by two SHAs.
+        '''
+        diff_data = self._make_request("GET", f"/repos/{owner}/{repo}/compare/{shaBefore}...{shaAfter}", token)
+        
+        files = [PatchFileDTO(
+            filename=file['filename'],
+            status=file['status'],
+            additions=file['additions'],
+            deletions=file['deletions'],
+            changes=file['changes'],
+            patch=file.get('patch', '')
+        ) for file in diff_data.get('files', [])]
+
+        return DiffDTO(
+            repo_name=repo,
+            repo_id=0,
+            owner_name=owner,
+            branch_before=shaBefore,
+            branch_after=shaAfter,
+            commit_before_sha=diff_data['base_commit']['sha'],
+            commit_after_sha=diff_data['merge_base_commit']['sha'],
+            files=files
+        )
+
+    def _fetch_codebase_snapshot(self, owner: str, repo_name: str, token: str, expression: str) -> CodebaseDTO:
+        """
+        Internal helper to retrieve a codebase snapshot using GraphQL based on an expression (branch or SHA).
+        """
+        TREE_QUERY = """
+        query GetRepositoryTree($owner: String!, $name: String!, $expression: String!) {
+          repository(owner: $owner, name: $name) {
+            object(expression: $expression) {
+              ... on Tree {
+                entries {
+                  name
+                  path
+                  type
+                  object {
+                    ... on Blob {
+                      byteSize
+                      text
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        variables = {"owner": owner, "name": repo_name, "expression": expression}
+        tree_data = self._execute_graphql(TREE_QUERY, variables, token)
+        
+        parsed_files = []
+        entries = tree_data.get('data', {}).get('repository', {}).get('object', {}).get('entries', [])
+
+        for entry in entries:
+            if entry['type'] == 'blob' and entry['object'] and entry['object'].get('text') is not None:
+                parsed_files.append(CodeFileDTO(
+                    filename=entry['name'],
+                    path=entry['path'],
+                    code_content=entry['object']['text'],
+                    last_modified_at=datetime.now() 
+                ))
+
+        return CodebaseDTO(repository_name=f"{owner}/{repo_name}", files=parsed_files)
+
+    def getSnapshotByTime(self, user: str, token: str, owner: str, repo: str, branch: str, time: datetime) -> CodebaseDTO:
+        '''
+        Gets a snapshot of the repository at a specific time. Simplified for now.
+        '''
+        expression = f"{branch}:"
+        return self._fetch_codebase_snapshot(owner, repo, token, expression)
+
+    def getSnapshotBySHA(self, user: str, token: str, owner: str, repo: str, sha: str) -> CodebaseDTO:
+        '''
+        Gets a snapshot of the repository at a specific commit SHA.
+        '''
+        expression = f"{sha}:"
+        return self._fetch_codebase_snapshot(owner, repo, token, expression)
+
+
+
+
+
+    # ----- Added 20250913
+    def getSingleRepoByID(self, token: str, repo_id: int) -> RepoDTO:
+        """
+        Fetches a single repository by its GitHub ID.
+        """
+        try:
+            repo_data = self._make_request("GET", f"/repositories/{repo_id}", token)
+            return RepoDTO(
+                github_id=repo_data['id'],
+                github_node_id=repo_data['node_id'],
+                github_name=repo_data['name'],
+                github_owner_id=repo_data['owner']['id'],
+                github_owner_login=repo_data['owner']['login'],
+                github_html_url=repo_data['html_url'],
+                github_url=repo_data['url'],
+                github_full_name=repo_data['full_name'],
+                description=repo_data.get('description')
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"Warning: Repository with ID {repo_id} not found.")
+                return None
+            raise
     
+    def getBranchesByRepoId(self, token: str, repo_id: int,user: str=None) -> BranchListDTO:
+        """
+        Returns a list of branches for a given repository ID.
+        """
+        repo_dto = self.getSingleRepoByID(token, repo_id)
+        if not repo_dto:
+            return BranchListDTO(branchList=[])
+
+        owner = repo_dto.github_owner_login
+        repo_name = repo_dto.github_name
+        
+        branches_data = self._make_request("GET", f"/repos/{owner}/{repo_name}/branches", token)
+        
+        branch_list = []
+        for branch in branches_data:
+            commit_sha = branch['commit']['sha']
+            commit_data = self._make_request("GET", f"/repos/{owner}/{repo_name}/commits/{commit_sha}", token)
+            last_modification_str = commit_data['commit']['author']['date']
+            
+            branch_list.append(BranchDTO(
+                repo_id=repo_id, 
+                repo_name=repo_name,
+                owner_name=owner,
+                branch_name=branch['name'],
+                last_modification=datetime.fromisoformat(last_modification_str.replace('Z', '+00:00'))
+            ))
+            
+        return BranchListDTO(branchList=branch_list)
+    
+
+    # Added 20250913
 
     def _get_first_commit_sha(self, token: str, owner: str, repo: str, branch: str) -> Optional[str]:
         """
@@ -249,6 +526,7 @@ class GithubService:
         except Exception as e:
             print(f"ERROR: An unexpected error occurred: {e}")
             return None
+
 
     def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
         """
@@ -314,6 +592,8 @@ class GithubService:
             return None
 
 
+
+    # Debug line
     def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
                         datetime_from: datetime, datetime_to: datetime,
                         default_merged_branch: str = 'main') -> Optional[DiffDTO]:
