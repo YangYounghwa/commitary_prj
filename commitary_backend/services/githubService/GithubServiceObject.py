@@ -287,40 +287,7 @@ class GithubService:
             return None 
 
 
-    def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> Optional[str]:
-        """
-        Finds the latest commit SHA on a branch before a specific datetime.
-        
-        This function uses a simple approach: it queries the GitHub API for the latest
-        commit up to the target_datetime.
-        """
-        try:
-            params = {
-                "sha": branch,
-                "until": target_datetime.isoformat(),
-                "per_page": 1
-            }
-            
-            # Use a more descriptive endpoint name
-            commits_endpoint = f"/repos/{owner}/{repo}/commits"
-            
-            # This assumes _make_request handles the full URL and headers
-            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
-
-            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
-                return commits_data[0]['sha']
-            
-            # If the list is empty, it means no commit was found before the datetime.
-            print(f"DEBUG: No commit found on branch '{branch}' for datetime '{target_datetime.isoformat()}'.")
-            return None
-
-        except requests.exceptions.RequestException as e:
-            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
-            print(f"ERROR: Response body: {e.response.text}")
-            return None
-        except Exception as e:
-            print(f"ERROR: An unexpected error occurred: {e}")
-            return None
+ 
 
     def getDiffByTime(self, user: str, token: str, owner: str, repo: str, branch: str, beforeDatetime: datetime, afterDatetime: datetime) -> DiffDTO | None:
         """
@@ -491,41 +458,7 @@ class GithubService:
 
     # Added 20250913
 
-    def _get_first_commit_sha(self, token: str, owner: str, repo: str, branch: str) -> Optional[str]:
-        """
-        Finds the first commit SHA on a branch.
-        
-        This function uses the GitHub API's commits endpoint, sorting by ascending
-        date to find the initial commit.
-        """
-        # Debug line
-        print(f"DEBUG: Entering _get_first_commit_sha for branch '{branch}'.")
-        try:
-            params = {
-                "sha": branch,
-                "per_page": 1,
-                "direction": "asc"
-            }
-            
-            commits_endpoint = f"/repos/{owner}/{repo}/commits"
-            # Debug line
-            print(f"DEBUG: API call to: {self.api_base_url}{commits_endpoint} with params: {params}")
-            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
 
-            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
-                # Debug line
-                print(f"DEBUG: Found first commit SHA: {commits_data[0]['sha']}")
-                return commits_data[0]['sha']
-            
-            print(f"DEBUG: No commits found on branch '{branch}'.")
-            return None
-        except requests.exceptions.RequestException as e:
-            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
-            print(f"ERROR: Response body: {e.response.text}")
-            return None
-        except Exception as e:
-            print(f"ERROR: An unexpected error occurred: {e}")
-            return None
 
 
     def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
@@ -593,7 +526,81 @@ class GithubService:
 
 
 
-    # Debug line
+ 
+
+# ADDED 20250914
+
+    def _get_first_commit_sha(self, token: str, owner: str, repo: str, branch: str) -> Optional[str]:
+        """
+        Finds the first commit SHA on a branch.
+        
+        This function uses the GitHub API's commits endpoint, sorting by ascending
+        date to find the initial commit.
+        """
+        # Debug line
+        print(f"DEBUG: Entering _get_first_commit_sha for branch '{branch}'.")
+        try:
+            params = {
+                "sha": branch,
+                "per_page": 1,
+                "direction": "asc"
+            }
+            
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            # Debug line
+            print(f"DEBUG: API call to: {self.api_base_url}{commits_endpoint} with params: {params}")
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+
+            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
+                # Debug line
+                print(f"DEBUG: Found first commit SHA: {commits_data[0]['sha']}")
+                return commits_data[0]['sha']
+            
+            print(f"DEBUG: No commits found on branch '{branch}'.")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None
+
+    def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> Optional[str]:
+        """
+        Finds the latest commit SHA on a branch before a specific datetime.
+        
+        This function uses a simple approach: it queries the GitHub API for the latest
+        commit up to the target_datetime.
+        """
+        try:
+            params = {
+                "sha": branch,
+                "until": target_datetime.isoformat(),
+                "per_page": 1
+            }
+            
+            # Use a more descriptive endpoint name
+            commits_endpoint = f"/repos/{owner}/{repo}/commits"
+            
+            # This assumes _make_request handles the full URL and headers
+            commits_data = self._make_request("GET", commits_endpoint, token, params=params)
+
+            if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
+                return commits_data[0]['sha']
+            
+            # If the list is empty, it means no commit was found before the datetime.
+            print(f"DEBUG: No commit found on branch '{branch}' for datetime '{target_datetime.isoformat()}'.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            print(f"ERROR: Response body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred: {e}")
+            return None
+
     def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
                         datetime_from: datetime, datetime_to: datetime,
                         default_merged_branch: str = 'main') -> Optional[DiffDTO]:
@@ -662,6 +669,8 @@ class GithubService:
             print("DEBUG: Successfully generated DiffDTO.")
         
         return diff_dto
+
+
 
 # Singleton instance
 gb_service = GithubService()
