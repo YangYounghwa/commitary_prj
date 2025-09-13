@@ -213,15 +213,14 @@ def create_app():
                 return jsonify({"message": "Repository already registered"}), 409 # Conflict
 
         # Fetch the RepoDTO from the GitHub service
-        # NOTE: The provided RepoDTO class does not contain the timestamp fields.
-        # This implementation assumes the getSingleRepoByID function can return them.
-        # I have also consulted public documentation for the GitHub API to confirm
-        # that these fields are available in a standard repository response.
         repo_dto:RepoDTO = gb_service.getSingleRepoByID(token=user_token, repo_id=repo_id)
         if not repo_dto:
             return jsonify({"error": f"Repository with ID {repo_id} not found on GitHub."}), 404
 
         try:
+            # Get the current time in UTC, which is recommended for database timestamps
+            now_utc = datetime.now(timezone.utc)
+            
             # Insert the new repository into the "repos" table
             with conn.cursor() as cur:
                 cur.execute(
@@ -240,9 +239,9 @@ def create_app():
                         repo_dto.github_owner_login,
                         repo_dto.github_html_url,
                         repo_dto.github_url,
-                        repo_dto.created_at,  # Assuming this exists in the DTO
-                        repo_dto.updated_at,  # Assuming this exists in the DTO
-                        repo_dto.pushed_at    # Assuming this exists in the DTO
+                        now_utc,
+                        now_utc,
+                        now_utc
                     )
                 )
             conn.commit()

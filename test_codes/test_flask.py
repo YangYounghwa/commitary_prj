@@ -210,7 +210,7 @@ def test_repo_lifecycle_end_to_end(client):
     print(f"\nSuccessfully retrieved commitary_id: {commitary_id}")
 
     # 2. Get repos and select the first one to register
-    repos_response = client.get("/repos", query_string={'user': TEST_USER, 'token': GITHUB_TOKEN})
+    repos_response = client.get("/repos", query_string={'user': "YangYounghwa", 'token': GITHUB_TOKEN})
     assert repos_response.status_code == 200
     repos_data = repos_response.json
     assert len(repos_data['repoList']) > 0, "User must have at least one repository to run this test."
@@ -230,8 +230,9 @@ def test_repo_lifecycle_end_to_end(client):
     )
     # The status code could be 201 (Created) or 409 (Conflict, if already registered)
     # The test should pass in both cases for a robust check
-    assert register_response.status_code in [201, 409]
     print(f"Registration response status code: {register_response.status_code}")
+    assert register_response.status_code in [201, 409]
+    
 
     # 4. Receive (get) the registered repository
     get_registered_response = client.get(
