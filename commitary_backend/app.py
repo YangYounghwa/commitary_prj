@@ -246,11 +246,20 @@ def create_app():
 
         try:
             repo_id = int(repo_id)
+
+            # Fix for the 'Z' suffix issue in datetime.fromisoformat()
+            # It's a robust solution for all Python versions, even 3.11+
+            if datetime_from_str.endswith('Z'):
+                datetime_from_str = datetime_from_str.replace('Z', '+00:00')
+            if datetime_to_str.endswith('Z'):
+                datetime_to_str = datetime_to_str.replace('Z', '+00:00')
+                
             datetime_from = datetime.fromisoformat(datetime_from_str)
             datetime_to = datetime.fromisoformat(datetime_to_str)
-        except (ValueError, TypeError):
-            print("Invalid parameter type. Datetime must be in ISO format and repo_id must be an integer.")
-            return "Invalid parameter type. Datetime must be in ISO format and repo_id must be an integer.", 400
+        except (ValueError, TypeError) as e:
+            print(f"Invalid parameter type or format. Error: {e}")
+            return "Invalid parameter type or format. Datetime must be in ISO format and repo_id must be an integer.", 400
+
 
         # Assuming 'api_service' is an instance of YourApiService
         
