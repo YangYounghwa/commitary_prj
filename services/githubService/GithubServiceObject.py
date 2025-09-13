@@ -43,27 +43,36 @@ class GithubService:
         response.raise_for_status()
         return response.json()
 
-
+    # --- 🔽 1. 수정된 함수 🔽 ---
     # TODO : UserGBInfoDTO updated, must be updated as well
+    
+    
     def getUserMetadata(self, user: str, token: str) -> UserGBInfoDTO:
         """
         Fetches metadata for the authenticated user from GitHub.
         'user' parameter is kept for consistency but the API endpoint uses the token's user.
         """
-        # REST API의 GET /user 엔드포인트를 호출하여 인증된 사용자의 정보를 가져옵니다.
         user_data = self._make_request("GET", "/user", token)
 
-        # API 응답을 UserGBInfoDTO 형식에 맞춰 변환합니다.
-        # 우리 서비스의 내부 id는 이 서비스에서 알 수 없으므로 0으로 설정합니다.
-        # public name이 없는 경우 login(사용자 이름)으로 대체합니다.
+        # 새로운 DTO 규격에 맞춰 필수 필드들을 모두 채워줍니다.
         return UserGBInfoDTO(
-            id=0, # This is our internal DB ID, GithubService doesn't know this.
+            id=0, 
             name=user_data.get('name') or user_data.get('login'),
             emailList=[user_data.get('email')] if user_data.get('email') else [],
             defaultEmail=user_data.get('email'),
             github_id=user_data['id'],
-            github_username=user_data['login']
+            github_username=user_data['login'],
+
+            # --- 오류 해결을 위해 추가된 필수 필드 ---
+            github_avatar_url=user_data.get('avatar_url'),
+            github_url=user_data.get('url'),
+            github_html_url=user_data.get('html_url'),
+
+            # --- DTO에 포함된 다른 선택적 필드들 ---
+            bio=user_data.get('bio'),
+            company=user_data.get('company')
         )
+
 
     def getRepos(self, user: str, token: str, commitary_id: int) -> RepoListDTO:
         '''
@@ -107,17 +116,50 @@ class GithubService:
             
         return BranchListDTO(branchList=branch_list)
 
+    # --- 🔽 2. 수정된 함수 🔽 ---
     # TODO : CommitListDTO updated, must update as well.
     def getCommitMsgs(self, user: str, token: str, owner: str, repo: str, branch: str, startdatetime: datetime, enddatetime: datetime) -> CommitListDTO:
         '''
-        Returns a list of commit messages for a given branch within a time range.
+        Returns a list of commit messages for a given branch within a time range using GraphQL for efficiency.
         '''
-        params = {
-            "sha": branch,
+        # 코드 변경량(additions, deletions)을 함께 가져오기 위해 GraphQL 쿼리 사용
+        COMMIT_HISTORY_QUERY = """
+        query GetCommitHistory($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp!, $until: GitTimestamp!) {
+          repository(owner: $owner, name: $repo) {
+            ref(qualifiedName: $branch) {
+              target {
+                ... on Commit {
+                  history(since: $since, until: $until) {
+                    nodes {
+                      sha
+                      author {
+                        name
+                        email
+                        user {
+                          id
+                        }
+                      }
+                      committedDate
+                      additions
+                      deletions
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        variables = {
+            "owner": owner,
+            "repo": repo,
+            "branch": branch,
             "since": startdatetime.isoformat(),
             "until": enddatetime.isoformat()
         }
-        commits_data = self._make_request("GET", f"/repos/{owner}/{repo}/commits", token, params=params)
+        
+        commits_data = self._execute_graphql(COMMIT_HISTORY_QUERY, variables, token)
+        commit_nodes = commits_data.get('data', {}).get('repository', {}).get('ref', {}).get('target', {}).get('history', {}).get('nodes', [])
 
         commit_list = [CommitMDDTO(
             sha=commit['sha'],
@@ -125,11 +167,13 @@ class GithubService:
             repo_id=0,
             owner_name=owner,
             branch_sha=branch,
-            author_github_id=commit['author']['id'] if commit.get('author') else None,
-            author_name=commit['commit']['author']['name'],
-            author_email=commit['commit']['author']['email'],
-            commit_datetime=datetime.fromisoformat(commit['commit']['author']['date'].replace('Z', '+00:00'))
-        ) for commit in commits_data]
+            author_github_id=commit.get('author', {}).get('user', {}).get('id') if commit.get('author', {}).get('user') else None,
+            author_name=commit.get('author', {}).get('name'),
+            author_email=commit.get('author', {}).get('email'),
+            commit_datetime=datetime.fromisoformat(commit['committedDate'].replace('Z', '+00:00')),
+            additions=commit.get('additions'),
+            deletions=commit.get('deletions')
+        ) for commit in commit_nodes]
         
         return CommitListDTO(commitList=commit_list)
 
@@ -146,24 +190,20 @@ class GithubService:
             return commits_data[0]['sha']
         return None
 
-    
     def getDiffByTime(self, user: str, token: str, owner: str, repo: str, branch: str, beforeDatetime: datetime, afterDatetime: datetime) -> DiffDTO | None:
         """
         Difference between two points in time on a given branch.
         Finds the latest commits before 'beforeDatetime' and 'afterDatetime' and compares them.
         """
-        # 1. 각 시간에 해당하는 커밋의 SHA 값을 헬퍼 함수를 이용해 찾습니다.
         shaBefore = self._get_sha_by_datetime(token, owner, repo, branch, beforeDatetime)
         shaAfter = self._get_sha_by_datetime(token, owner, repo, branch, afterDatetime)
 
-        # 2. 두 시간 모두 유효한 커밋을 찾았는지 확인합니다.
         if not shaBefore or not shaAfter:
             print("Warning: Could not find commits for one or both of the given datetimes.")
             return None
 
         if shaBefore == shaAfter:
             print("Warning: The commits at both times are the same. No difference.")
-            # 변경사항이 없는 빈 DiffDTO를 반환할 수도 있습니다.
             return DiffDTO(
                 repo_name=repo,
                 repo_id=0,
@@ -175,7 +215,6 @@ class GithubService:
                 files=[]
             )
 
-        # 3. 이미 만들어진 getDiffBySHA 함수를 호출하여 최종 결과를 반환합니다.
         return self.getDiffBySHA(user, token, owner, repo, shaBefore, shaAfter)
 
     def getDiffBySHA(self, user: str, token: str, owner: str, repo: str, shaBefore: str, shaAfter: str) -> DiffDTO:
@@ -207,7 +246,6 @@ class GithubService:
     def _fetch_codebase_snapshot(self, owner: str, repo_name: str, token: str, expression: str) -> CodebaseDTO:
         """
         Internal helper to retrieve a codebase snapshot using GraphQL based on an expression (branch or SHA).
-        This logic is refactored from the team lead's AI-generated example.
         """
         TREE_QUERY = """
         query GetRepositoryTree($owner: String!, $name: String!, $expression: String!) {
