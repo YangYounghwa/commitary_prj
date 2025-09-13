@@ -507,8 +507,8 @@ class GithubService:
         shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         shaAfter = self._get_sha_by_datetime(user_token, owner, repo_name, branch_to, datetime_to)
 
-        # Fallback logic if the direct lookup fails for branch_from
-        if not shaBefore:
+        # Fallback logic if the direct lookup fails for branch_from and it's not the default merged branch
+        if not shaBefore and branch_from != default_merged_branch:
             print(f"Warning: Direct lookup failed for branch '{branch_from}'. Attempting to find merge commit.")
             shaBefore = self._get_sha_by_datetime_after_merge(
                 user_token, owner, repo_name, default_merged_branch, branch_from, datetime_from
@@ -521,8 +521,8 @@ class GithubService:
             shaBefore = self._get_first_commit_sha(user_token, owner, repo_name, branch_from)
 
 
-        # Fallback logic for branch_to
-        if not shaAfter:
+        # Fallback logic for branch_to and it's not the default merged branch
+        if not shaAfter and branch_to != default_merged_branch:
             print(f"Warning: Direct lookup failed for branch '{branch_to}'. Attempting to find merge commit.")
             shaAfter = self._get_sha_by_datetime_after_merge(
                 user_token, owner, repo_name, default_merged_branch, branch_to, datetime_to
