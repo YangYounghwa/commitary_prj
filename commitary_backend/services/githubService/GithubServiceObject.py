@@ -699,13 +699,7 @@ class GithubService:
         return diff_dto
 
 
-    # ========== BEGIN helper utilities (local to this file; no signature changes) ==========
-
-    
-
-
-
-    # ========== END helper utilities ==========
+ 
 
 
 # Singleton instance
