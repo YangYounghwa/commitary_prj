@@ -137,3 +137,5 @@ cython_debug/
 # Local files
 reference_example/
 github_api_output/
+
+*ipynbtest.ipynb

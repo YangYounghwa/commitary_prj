@@ -14,6 +14,9 @@ from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, Di
 import psycopg2
 
 
+from flask_cors import CORS
+
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -74,6 +77,7 @@ def create_app():
     
     """
     app = Flask(__name__)
+    CORS(app)
 
     # --- Configuration and Sanity Check ---
     app.secret_key = os.getenv("FLASK_SECRET_KEY")
@@ -385,7 +389,7 @@ def create_app():
         
         
         # Call the core logic function with all the arguments, including the default_branch
-        diff_dto = gb_service.getDiffByIdTime2(
+        diff_dto:DiffDTO = gb_service.getDiffByIdTime2(
             user_token=user_token,
             repo_id=repo_id,
             branch_from=branch_from,
@@ -439,8 +443,8 @@ def create_app():
 
 
 
-
-if __name__ == "__main__":
+# no need when using gunicorn
+# if __name__ == "__main__":
     
-    app = create_app()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+#     app = create_app()
+#     app.run(host="0.0.0.0", port=5000, debug=True)
