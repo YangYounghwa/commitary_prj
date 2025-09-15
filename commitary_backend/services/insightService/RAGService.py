@@ -39,11 +39,18 @@ class RAGService:
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert software developer. Analyze the following code changes (diff) and provide a concise, high-level summary of the key insights. Use the provided context from the codebase to better understand the purpose and impact of the changes. Focus on what was changed and why, not just the lines of code."),
-            ("user", f"Repository: {repo_name}\nBranch: {branch_name}\n\n### Code Context (from the start of the week):\n{context_text}\n\n### Code Changes (this week's diff):\n{diff_text}")
+            # Corrected: Use placeholders in the template
+            ("user", "Repository: {repo_name}\nBranch: {branch_name}\n\n### Code Context (from the start of the week):\n{context_text}\n\n### Code Changes (this week's diff):\n{diff_text}")
         ])
 
         chain = prompt | self.llm
-        response = chain.invoke({})
+        # Corrected: Pass the actual values to the invoke method
+        response = chain.invoke({
+            "repo_name": repo_name,
+            "branch_name": branch_name,
+            "context_text": context_text,
+            "diff_text": diff_text
+        })
 
         return InsightItemDTO(
             branch_name=branch_name,

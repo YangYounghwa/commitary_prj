@@ -79,7 +79,7 @@ def create_app():
     @with_db_connection
     def getCommitary_id(conn):
         """
-        Search DB for user, if found return user commitary_id.
+        Search DB for user, if found return user commitary_id./
         If not, register user and retrieve the new ID.
         The database connection is handled by the decorator.
         """
@@ -87,7 +87,7 @@ def create_app():
         userinfo = None
 
         # DEBUG CODE : DELETE THIS AFTER DEBUGGING.
-        print(f"DEBUG: Token received: {user_token}")
+        # print(f"DEBUG: Token received: {user_token}")
  
 
         # Step 1: Get user metadata from GitHub
