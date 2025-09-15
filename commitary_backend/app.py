@@ -10,7 +10,10 @@ from psycopg2 import pool
 
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
 from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, RepoListDTO, UserGBInfoDTO
+from commitary_backend.dto.insightDTO import DailyInsightListDTO, InsightItemDTO, DailyInsightDTO
+from commitary_backend.services.insightService.InsightServiceObject import insight_service
 
+import traceback
 import psycopg2
 
 
@@ -42,31 +45,7 @@ load_dotenv()
 #         print(f"Database connection failed: {e}")
 #         return None
 
-db_pool = None
-
-def create_db_pool():
-    global db_pool
-    # ... (same logic as before to create the pool from DATABASE_URL)
-    if db_pool:
-        return
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        print("DATABASE_URL environment variable is not set.")
-        return
-    try:
-        url = urlparse(db_url)
-        db_pool = pool.ThreadedConnectionPool(
-            minconn=1, maxconn=20,
-            user=url.username, password=url.password,
-            host=url.hostname, port=url.port,
-            dbname=url.path[1:]
-        )
-        print("Database connection pool created successfully.")
-    except Exception as e:
-        print(f"Failed to create database connection pool: {e}")
-        db_pool = None
-
-create_db_pool()
+from commitary_backend.database import create_db_pool
 from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
 
@@ -76,7 +55,9 @@ def create_app():
     Application factory function for the Flask app.
     
     """
+    
     app = Flask(__name__)
+    create_db_pool(app)
     CORS(app)
 
     # --- Configuration and Sanity Check ---
@@ -95,10 +76,10 @@ def create_app():
 
 
     @app.route("/user",methods=['GET'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def getCommitary_id(conn):
         """
-        Search DB for user, if found return user commitary_id.
+        Search DB for user, if found return user commitary_id./
         If not, register user and retrieve the new ID.
         The database connection is handled by the decorator.
         """
@@ -106,7 +87,7 @@ def create_app():
         userinfo = None
 
         # DEBUG CODE : DELETE THIS AFTER DEBUGGING.
-        print(f"DEBUG: Token received: {user_token}")
+        # print(f"DEBUG: Token received: {user_token}")
  
 
         # Step 1: Get user metadata from GitHub
@@ -146,10 +127,12 @@ def create_app():
             user_dict = userinfo.model_dump()
             return jsonify(user_dict)
         else:
+            
+            traceback.print_exc()
             return jsonify({"error": "Failed to retrieve or register user information."}), 500
 
     @app.route("/update_user",methods=['POST'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def updateUserDB():
         # TODO : Update DB user info table according to the github.
         #   priority : Low
@@ -191,7 +174,7 @@ def create_app():
 
 
     @app.route("/registerRepo",methods=['POST'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def postRegisterRepo(conn):
         user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
@@ -255,7 +238,7 @@ def create_app():
             return jsonify({"error": f"Failed to register repository: {e}"}), 500
 
     @app.route("/deleteRepo",methods=['DELETE'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def deleteRegisteredRepo(conn):
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
@@ -291,7 +274,7 @@ def create_app():
 
 
     @app.route("/registeredRepos",methods=['GET'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def getRegisteredRepos(conn):
         commitary_id = request.args.get('commitary_id')
 
@@ -384,8 +367,6 @@ def create_app():
             print(f"Invalid parameter type or format. Error: {e}")
             return "Invalid parameter type or format. Datetime must be in ISO format and repo_id must be an integer.", 400
 
-
-        # Assuming 'api_service' is an instance of YourApiService
         
         
         # Call the core logic function with all the arguments, including the default_branch
@@ -420,19 +401,79 @@ def create_app():
 
 
     @app.route("/createInsight",methods=['POST'])
-    @with_db_connection(db_pool)
     def createInsight():
+        user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
-        start_date = request.args.get('date_from')
-        end_date = request.args.get('date_to')
+        start_date_str = request.args.get('date_from')
+        branch = request.args.get('branch')
+
+        if not all([user_token, repo_id, commitary_id, start_date_str, branch]):
+            return jsonify({"error": "Missing one or more required parameters."}), 400
+
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+            if start_date_str.endswith('Z'):
+                start_date_str = start_date_str.replace('Z', '+00:00')
+            start_datetime = datetime.fromisoformat(start_date_str)
+        except (ValueError, TypeError) as e:
+            return jsonify({"error": f"Invalid parameter type or format: {e}"}), 400
+
+        
+        status_code = insight_service.createDailyInsight(
+            commitary_id=commitary_id,
+            repo_id=repo_id,
+            start_datetime=start_datetime,
+            branch=branch,
+            user_token=user_token
+        )
+
+        status_messages = {
+            0: ("Insight created successfully.", 201),
+            1: ("Insight for this date already exists.", 409),
+            -1: ("No activity found for the specified date.", 200),
+            2: ("An error occurred while creating the insight.", 500)
+        }
+        
+        message, http_status = status_messages.get(status_code, ("An unknown error occurred.", 500))
+        
+        return jsonify({"message": message}), http_status
+
 
     @app.route('/insights',methods=['GET'])
-    @with_db_connection(db_pool)
     def getInsights():
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
-        date_from = request.args('date_from')
+        date_from_str = request.args.get('date_from')
+        date_to_str = request.args.get('date_to')
+
+        if not all([repo_id, commitary_id, date_from_str, date_to_str]):
+            return jsonify({"error": "Missing one or more required parameters"}), 400
+        
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+            
+            if date_from_str.endswith('Z'):
+                date_from_str = date_from_str.replace('Z', '+00:00')
+            if date_to_str.endswith('Z'):
+                date_to_str = date_to_str.replace('Z', '+00:00')
+                
+            datetime_from = datetime.fromisoformat(date_from_str)
+            datetime_to = datetime.fromisoformat(date_to_str)
+        except (ValueError, TypeError) as e:
+            return jsonify({"error": f"Invalid parameter type or format: {e}"}), 400
+
+
+        insight_list_dto: DailyInsightListDTO = insight_service.getInsights(
+            commitary_id=commitary_id,
+            repo_id=repo_id,
+            start_datetime=datetime_from,
+            end_datetime=datetime_to
+        )
+        
+        return jsonify(insight_list_dto.model_dump())
 
 
     return app

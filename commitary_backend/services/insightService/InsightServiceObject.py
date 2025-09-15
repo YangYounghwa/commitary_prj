@@ -1,16 +1,36 @@
 import os
 from typing import List, Optional
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
-from commitary_backend.dto.insightDTO import DailyInsightDTO, InsightItemDTO
-from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, CommitListDTO, DiffDTO
+from commitary_backend.services.insightService.RAGService import rag_service
+from commitary_backend.dto.insightDTO import DailyInsightDTO, DailyInsightListDTO, InsightItemDTO
+from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, CommitListDTO, DiffDTO, RepoDTO
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 
 
-# Vector DB table
-'''CREATE TYPE enum_type AS ENUM ('codebase', 'patch', 'externaldoc');
+
+
+from commitary_backend.commitaryUtils.dbConnectionDecorator import with_db_connection
+
+
+
+import os
+from typing import List, Optional, Dict, Any
+import torch
+from transformers import AutoTokenizer, AutoModel
+from langchain_core.embeddings import Embeddings
+from langchain_postgres.vectorstores import PGVector
+from langchain_core.documents import Document
+
+
+
+# SQL schema.
+'''
+CREATE TYPE enum_type AS ENUM ('codebase', 'patch', 'externaldoc');
 CREATE TABLE IF NOT EXISTS vector_data (
     id TEXT PRIMARY KEY,
     embedding VECTOR(1536) NOT NULL,
@@ -22,439 +42,258 @@ CREATE TABLE IF NOT EXISTS vector_data (
     metadata_type enum_type,
     metadata_lastModifiedTime TIMESTAMPTZ
 );
-'''
 
-# User table.
-'''
-CREATE TABLE IF NOT EXISTS "emailList" (
-    email_key SERIAL PRIMARY KEY,
-    email TEXT UNIQUE,
-    commitary_id BIGINT
-);
-
-CREATE TABLE IF NOT EXISTS "UserInfo" (
-    commitary_id BIGINT PRIMARY KEY,
-    github_id BIGINT,
-    github_name TEXT,
-    emailList_key INTEGER REFERENCES "emailList"(email_key),
-    defaultEmail TEXT,
-    github_url TEXT,
-    github_html_url TEXT
-);
-
-CREATE TABLE IF NOT EXISTS "repos" (
-    commitary_repo_id SERIAL PRIMARY KEY,
-    commitary_id BIGINT,
-    github_id BIGINT,
-    github_name TEXT,
-    github_owner_id BIGINT,
-    github_owner_login TEXT,
-    github_html_url TEXT,
-    github_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE,
-    updated_at TIMESTAMP WITH TIME ZONE,
-    pushed_at TIMESTAMP WITH TIME ZONE
-);
-
-'''    
-
-# Insight saved in this format.  Might need to change insightDTO  to send info. 
-''' 
-CREATE TABLE IF NOT EXISTS "Insight" (
-    insight_id SERIAL PRIMARY KEY,
-    insight TEXT,
+CREATE TABLE IF NOT EXISTS "daily_insight" (
+    daily_insight_id SERIAL PRIMARY KEY,
     date DATE,
     commitary_id INT,
-    branch_name TEXT,
     repo_name TEXT,
     repo_id INT,
+    activity BOOLEAN,
     CONSTRAINT fk_commitary_id
         FOREIGN KEY (commitary_id)
-        REFERENCES "UserInfo"(commitary_id)
+        REFERENCES "user_info"(commitary_id)
+);
+
+CREATE TABLE IF NOT EXISTS "insight_item" (
+    insight_item_id SERIAL PRIMARY KEY,
+    repo_name TEXT,
+    repo_id INT,
+    branch_name TEXT,
+    insight TEXT,
+    daily_insight_id INT,
+    CONSTRAINT fk_daily_insight
+        FOREIGN KEY (daily_insight_id)
+        REFERENCES "daily_insight"(daily_insight_id)
 );
 '''
 
-
-def get_db_connection():
-    """
-    Establishes a connection to the PostgreSQL database using psycopg2.
-    The connection details are fetched from environment variables.
-    """
-    try:
-        # The connection string can be a single string from the DATABASE_URL env var
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-        return conn
-    except psycopg2.OperationalError as e:
-        print(f"Database connection failed: {e}")
-        return None
-
-#--------------------------------------------------
-import os
-from typing import List, Optional, Dict, Any
-import torch
-from transformers import AutoTokenizer, AutoModel
-from langchain_core.embeddings import Embeddings
-from langchain_postgres.vectorstores import PGVector
-from langchain_core.documents import Document
-
-class CodeBERTEmbeddings(Embeddings):
-    def __init__(self, model_name: str = "microsoft/codebert-base", device: Optional[str] = None):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name)
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
-        self.model.eval()
-
-    @torch.no_grad()
-    def _embed_batch(self, texts: List[str]) -> List[List[float]]:
-        enc = self.tokenizer(texts, padding=True, truncation=True, max_length=512, return_tensors="pt").to(self.device)
-        out = self.model(**enc)
-        cls = out.last_hidden_state[:, 0, :]
-        cls = torch.nn.functional.normalize(cls, p=2, dim=1)
-        return cls.cpu().tolist()
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return self._embed_batch(texts)
-
-    def embed_query(self, text: str) -> List[float]:
-        return self._embed_batch([text])[0]
-
-def get_pgvector_store(embedder: Embeddings, collection: str = "code_rag") -> PGVector:
-    return PGVector(
-        connection=os.getenv("DATABASE_URL"),
-        embedding=embedder,
-        collection_name=collection,
-        use_jsonb=True
-    )
-
-def docs_from_diff(commitary_id: int, diff: DiffDTO) -> List[Document]:
-    docs = []
-    for pf in diff.files:
-        docs.append(Document(
-            page_content=pf.patch or "",
-            metadata={
-                "type": "patch",
-                "commitary_id": commitary_id,
-                "repo_id": diff.repo_id,
-                "repo_name": diff.repo_name,
-                "filepath": pf.filename,
-                "status": pf.status,
-                "additions": pf.additions,
-                "deletions": pf.deletions,
-                "changes": pf.changes,
-                "branch_before": diff.branch_before,
-                "branch_after": diff.branch_after,
-                "commit_before_sha": diff.commit_before_sha,
-                "commit_after_sha": diff.commit_after_sha,
-            }
-        ))
-    return docs
-
-def build_retriever_for_branch(
-    commitary_id: int,
-    repo_id: int,
-    repo_name: str,
-    branch_name: str,
-    k: int = 6,
-    collection: str = "code_rag"
-):
-    embedder = CodeBERTEmbeddings()
-    store = get_pgvector_store(embedder, collection)
-    filt: Dict[str, Any] = {
-        "$and": [
-            {"commitary_id": {"$eq": commitary_id}},
-            {"repo_id": {"$eq": repo_id}},
-            {"repo_name": {"$eq": repo_name}},
-            {"branch_after": {"$eq": branch_name}},
-        ]
-    }
-    return store.as_retriever(search_kwargs={"k": k, "filter": filt})
+from dotenv import load_dotenv
+load_dotenv()
 
 
 
-
-
-
-
-# --- LangChain: PGVector store + retriever -----------------------------------
-from langchain_postgres.vectorstores import PGVector
-from langchain_core.documents import Document
-
-def get_pgvector_store(embedder: Embeddings, collection: str = "code_rag") -> PGVector:
-    return PGVector(
-        connection=os.getenv("DATABASE_URL"),
-        embedding=embedder,
-        collection_name=collection,
-        use_jsonb=True
-    )
-
-def docs_from_codebase(commitary_id: int, repo_id: int, repo_name: str, codebase: CodebaseDTO) -> List[Document]:
-    docs = []
-    for f in codebase.files:
-        docs.append(Document(
-            page_content=f.code_content,
-            metadata={
-                "type": "codebase",
-                "commitary_id": commitary_id,
-                "repo_id": repo_id,
-                "repo_name": repo_name,
-                "filepath": f.path or f.filename,
-                "last_modified_at": f.last_modified_at.isoformat(),
-            }
-        ))
-    return docs
-
-def docs_from_diff(commitary_id: int, diff: DiffDTO) -> List[Document]:
-    docs = []
-    for pf in diff.files:
-        docs.append(Document(
-            page_content=pf.patch or "",
-            metadata={
-                "type": "patch",
-                "commitary_id": commitary_id,
-                "repo_id": diff.repo_id,
-                "repo_name": diff.repo_name,
-                "filepath": pf.filename,
-                "status": pf.status,
-                "additions": pf.additions,
-                "deletions": pf.deletions,
-                "changes": pf.changes,
-                "branch_before": diff.branch_before,
-                "branch_after": diff.branch_after,
-                "commit_before_sha": diff.commit_before_sha,
-                "commit_after_sha": diff.commit_after_sha,
-            }
-        ))
-    return docs
-
-def build_retriever(commitary_id: int, repo_id: int, repo_name: Optional[str] = None, branch_after: Optional[str] = None, k: int = 6, collection: str = "code_rag"):
-    embedder = CodeBERTEmbeddings()
-    store = get_pgvector_store(embedder, collection)
-    filt = {"$and": [
-        {"commitary_id": {"$eq": commitary_id}},
-        {"repo_id": {"$eq": repo_id}},
-    ]}
-    if repo_name:
-        filt["$and"].append({"repo_name": {"$eq": repo_name}})
-    if branch_after:
-        filt["$and"].append({"branch_after": {"$eq": branch_after}})
-    return store.as_retriever(search_kwargs={"k": k, "filter": filt})
-
-# --- LLM: OpenAI for Insight Generation --------------------------------------
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-
-INSIGHT_SYSTEM = """You are a precise code reviewer.
-Using the retrieved diffs, produce short, actionable insights about changes in this branch for the day:
-- risks, potential bugs, tests to add, and architectural implications.
-Keep each item 1–3 sentences and reference file paths if useful."""
-
-INSIGHT_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", INSIGHT_SYSTEM),
-    ("human", "Question: {question}\n\nContext:\n{context}")
-])
-
-def format_docs(docs: List[Document]) -> str:
-    lines = []
-    for d in docs:
-        m = d.metadata or {}
-        head = f"{m.get('filepath','?')} [{m.get('status','')}] {m.get('commit_after_sha','')}"
-        lines.append(f"### {head}\n{d.page_content[:1500]}")
-    return "\n\n".join(lines)
-
-def generate_branch_insight(retriever, the_date: date) -> str:
-    """Generate a single insight text for one branch (keep it concise)."""
-    llm = ChatOpenAI(model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
-    chain = ({"context": retriever | format_docs, "question": RunnablePassthrough()}
-             | INSIGHT_PROMPT
-             | llm)
-    q = f"Summarize the most impactful diffs and risks for {the_date}."
-    resp = chain.invoke(q)
-    return resp.content.strip()
-
-
-
-
-
-
-
-# --- Persistence (stubs) ------------------------------------------------------
-import psycopg2
-
-def save_daily_insight(conn, the_date: date, commitary_id: int, repo_name: str, repo_id: int, activity: bool) -> int:
-    """
-    Insert one DailyInsight row and return its id.
-    """
-    sql = """
-    INSERT INTO "DailyInsight" (date, commitary_id, repo_name, repo_id, activity)
-    VALUES (%s, %s, %s, %s, %s)
-    RETURNING daily_insight_id
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql, (the_date, commitary_id, repo_name, repo_id, activity))
-        daily_insight_id = cur.fetchone()[0]
-    return daily_insight_id
-
-def save_insight_items(conn, daily_insight_id: int, repo_name: str, repo_id: int, items: List[InsightItemDTO]) -> int:
-    """
-    Insert InsightItem rows linked to the given daily_insight_id.
-    """
-    if not items:
-        return 0
-    sql = """
-    INSERT INTO "InsightItem" (repo_name, repo_id, branch_name, insight, daily_insight_id)
-    VALUES (%s, %s, %s, %s, %s)
-    """
-    with conn.cursor() as cur:
-        for it in items:
-            cur.execute(sql, (repo_name, repo_id, it.branch_name, it.insight, daily_insight_id))
-    return len(items)
-
-def load_daily_insight(conn, the_date: date, commitary_id: int, repo_name: str, repo_id: int) -> Optional[DailyInsightDTO]:
-    sql_daily = """
-    SELECT daily_insight_id, activity
-    FROM "DailyInsight"
-    WHERE date = %s AND commitary_id = %s AND repo_name = %s AND repo_id = %s
-    """
-    sql_items = """
-    SELECT branch_name, insight
-    FROM "InsightItem"
-    WHERE daily_insight_id = %s
-    ORDER BY insight_item_id ASC
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql_daily, (the_date, commitary_id, repo_name, repo_id))
-        row = cur.fetchone()
-        if not row:
-            return None
-        daily_insight_id, activity = row
-        cur.execute(sql_items, (daily_insight_id,))
-        items = [InsightItemDTO(branch_name=b, insight=i) for (b, i) in cur.fetchall()]
-
-    return DailyInsightDTO(
-        commitary_id=commitary_id,
-        repo_name=repo_name,
-        repo_id=repo_id,
-        date_of_insight=the_date,
-        activity=activity,
-        items=items
-    )
-
-# --- Insight Service ----------------------------------------------------------
-from datetime import timedelta
-
-class InsightService:
-    def __init__(self, gb_service, dbconn_factory, collection: str = "code_rag"):
-        """
-        gb_service must provide:
-          - listBranches(repo_name) -> List[str]
-          - getDiffByInterval(repo, branch, start_dt, end_dt) -> DiffDTO
-        dbconn_factory: callable -> psycopg2 connection
-        """
-        self.gb_service = gb_service
-        self.dbconn_factory = dbconn_factory
-        self.collection = collection
-
-    def _ingest_diff(self, commitary_id: int, diff: DiffDTO) -> int:
-        """
-        Ingest only diffs (since insights are by difference).
-        """
-        embedder = CodeBERTEmbeddings()
-        store = get_pgvector_store(embedder, self.collection)
-        docs = docs_from_diff(commitary_id, diff)
-        return len(store.add_documents(docs))
-
-    def createInsight(
-        self,
-        commitary_id: int,
-        repo_name: str,
-        repo_id: int,
-        day: date
-    ) -> DailyInsightDTO:
-        """
-        For a single calendar day:
-          1) For each branch, fetch diffs in [day 00:00, next-day 00:00)
-          2) If branch has diffs, ingest and generate one InsightItem for that branch
-          3) Save one DailyInsight row (activity = items>0) and N InsightItem rows
-        """
-        start_dt = datetime.combine(day, datetime.min.time())
-        end_dt = start_dt + timedelta(days=1)
-
-        # Branch discovery (keep it simple)
-        branches: List[str] = self.gb_service.listBranches(repo_name)
-
-        items: List[InsightItemDTO] = []
-
-        for branch in branches:
-            diff: DiffDTO = self.gb_service.getDiffByInterval(
-                repo=repo_name,
-                branch=branch,
-                start_dt=start_dt,
-                end_dt=end_dt
-            )
-            # If no file diffs, skip this branch
-            if not diff.files:
-                continue
-
-            # Ingest and build retriever for this branch
-            self._ingest_diff(commitary_id, diff)
-            retriever = build_retriever_for_branch(
-                commitary_id=commitary_id,
-                repo_id=diff.repo_id,           # ensure consistent ids
-                repo_name=diff.repo_name,
-                branch_name=diff.branch_after or branch,
-                k=6,
-                collection=self.collection
-            )
-            # Generate one concise insight text for this branch
-            insight_text = generate_branch_insight(retriever, day)
-            if insight_text:
-                items.append(InsightItemDTO(branch_name=(diff.branch_after or branch), insight=insight_text))
-
-        activity = len(items) > 0
-
-        # Persist
-        conn = self.dbconn_factory()
-        try:
-            daily_id = save_daily_insight(conn, day, commitary_id, repo_name, repo_id, activity)
-            if activity:
-                _ = save_insight_items(conn, daily_id, repo_name, repo_id, items)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
-        return DailyInsightDTO(
-            commitary_id=commitary_id,
-            repo_name=repo_name,
-            repo_id=repo_id,
-            date_of_insight=day,
-            activity=activity,
-            items=items
+class InsightService():
+    
+    def __init__(self):
+        self.embeddings = OpenAIEmbeddings()
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
         )
-
-    def getInsight(
-        self,
-        commitary_id: int,
-        repo_name: str,
-        repo_id: int,
-        day: date
-    ) -> Optional[DailyInsightDTO]:
-        conn = self.dbconn_factory()
+        # Assuming DATABASE_URL is in the environment for PGVector
+        self.connection_string = os.getenv("DATABASE_URL")
+        self.vector_store = PGVector(
+    connection=self.connection_string,
+    embeddings=self.embeddings,
+    collection_name="codebase_snapshots"
+)
+    def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int):
+        """
+        Chunks, embeds, and stores the codebase snapshot in the vector database.
+        """
+        documents = []
+        for file in codebase_dto.files:
+            chunks = self.text_splitter.split_text(file.code_content)
+            for i, chunk in enumerate(chunks):
+                doc = Document(
+                    page_content=chunk,
+                    metadata={
+                        "commitary_user": commitary_id,
+                        "repo_name": codebase_dto.repository_name,
+                        "repo_id": repo_id,
+                        "target_branch": branch,
+                        "filepath": file.path,
+                        "type": "codebase",
+                        "lastModifiedTime": file.last_modified_at.isoformat(),
+                        "chunk_id": f"{repo_id}_{branch}_{file.path}_{i}"
+                    }
+                )
+                documents.append(doc)
+        
+        if documents:
+            self.vector_store.add_documents(documents)
+            print(f"DEBUG: Successfully embedded and stored {len(documents)} document chunks.")
+    
+    
+    
+    @with_db_connection
+    def createDailyInsight(self,  commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str,conn=None) -> int:
+        """
+        Creates a daily insight using a RAG system. It fetches a snapshot from the previous Monday,
+        embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
+        """
         try:
-            dto = load_daily_insight(conn, day, commitary_id, repo_name, repo_id)
-        finally:
-            conn.close()
-        return dto
+            insight_date = start_datetime.date()
+            print(f"DEBUG: Processing insight for date: {insight_date} for repo_id: {repo_id}")
+            
+            # Step 0: Check if insight already exists
+            with conn.cursor() as cur:
+                cur.execute("SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s", (commitary_id, repo_id, insight_date))
+                if cur.fetchone():
+                    print("DEBUG: Insight already exists for this date.")
+                    return 1
 
-# ------------------ Singleton wiring example ----------------------------------
-# from your_module import get_db_connection, gb_service
-# insight_service = InsightService(gb_service=gb_service, dbconn_factory=get_db_connection)
+            # Step 1: Get the most recent Monday
+            today = insight_date
+            monday_date = today - timedelta(days=today.weekday())
+            monday_start_datetime = datetime.combine(monday_date, datetime.min.time(), tzinfo=timezone.utc)
+
+            # Step 1.5: Check if the snapshot for this Monday already exists in the vector DB
+            snapshot_exists = False
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1 FROM vector_data 
+                    WHERE metadata_repo_id = %s 
+                      AND metadata_target_branch = %s 
+                      AND metadata_lastModifiedTime = %s 
+                      AND metadata_type = 'codebase'
+                    LIMIT 1
+                    """,
+                    (repo_id, branch, monday_start_datetime)
+                )
+                if cur.fetchone():
+                    snapshot_exists = True
+                    print(f"DEBUG: Codebase snapshot for {monday_date} already exists in the vector store.")
+
+            repo_dto: RepoDTO = gb_service.getSingleRepoByID(user_token, repo_id)
+            if not repo_dto:
+                print("ERROR: Repository not found on GitHub.")
+                return 2
+            
+            if not snapshot_exists:
+                # Step 2: Get Monday's codebase snapshot and embed it
+                print(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
+                monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
+                
+                if monday_snapshot and monday_snapshot.files:
+                    # Corrected line: removed the extra argument
+                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
+                else:
+                    print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
 
 
+            # Step 3: Get the diff from the start of the week to the target date
+            end_of_day = datetime.combine(insight_date, datetime.max.time(), tzinfo=timezone.utc)
+            diff_dto: DiffDTO = gb_service.getDiffByIdTime2(
+                user_token=user_token, repo_id=repo_id,
+                branch_from=branch, branch_to=branch,
+                datetime_from=monday_start_datetime, datetime_to=end_of_day
+            )
+
+            # Step 4: Handle no diff
+            if not diff_dto or not diff_dto.files:
+                print("DEBUG: No activity found for the specified date.")
+                activity_status = False
+                
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
+                        (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                    )
+                    conn.commit()
+                return -1 # Status: No activity
+            
+            activity_status = True
+            
+            # Step 5: Retrieve relevant documents from the vector store
+            diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
+            retriever = self.vector_store.as_retriever()
+            retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+            print(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
+
+            # Step 6: Generate insight with RAG context
+            insight_item: InsightItemDTO = rag_service.generate_insight_from_diff(
+                repo_dto.github_name, branch, diff_dto, retrieved_docs
+            )
+            # Step 7: Save the insight into the database
+            with conn.cursor() as cur:
+                # Insert into daily_insight table
+                cur.execute(
+                    "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
+                    (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                )
+                daily_insight_id = cur.fetchone()[0]
+
+                # Insert into insight_item table
+                cur.execute(
+                    "INSERT INTO insight_item (repo_name, repo_id, branch_name, insight, daily_insight_id) VALUES (%s, %s, %s, %s, %s)",
+                    (repo_dto.github_name, repo_id, branch, insight_item.insight, daily_insight_id)
+                )
+
+                conn.commit()
+            
+            print("DEBUG: Insight successfully created and saved.")
+            return 0 # Status: Success
+
+        except Exception as e:
+            conn.rollback()
+            print(f"ERROR: An exception occurred while creating insight: {e}")
+            return 2 # Status: Error
+    
+    @with_db_connection
+    def getInsights(self,commitary_id: int, repo_id: int, start_datetime: datetime, end_datetime: datetime,conn=None) -> DailyInsightListDTO:
+        """
+        Retrieves daily insights for a given user and repository within a specified date range.
+        """
+        try:
+            start_date = start_datetime.date()
+            end_date = end_datetime.date()
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        di.daily_insight_id,
+                        di.date,
+                        di.commitary_id,
+                        di.repo_name,
+                        di.repo_id,
+                        di.activity,
+                        ii.branch_name,
+                        ii.insight
+                    FROM daily_insight di
+                    LEFT JOIN insight_item ii ON di.daily_insight_id = ii.daily_insight_id
+                    WHERE
+                        di.commitary_id = %s AND
+                        di.repo_id = %s AND
+                        di.date >= %s AND
+                        di.date <= %s
+                    ORDER BY di.date DESC, ii.insight_item_id;
+                    """,
+                    (commitary_id, repo_id, start_date, end_date)
+                )
+                rows = cur.fetchall()
+
+            daily_insights_map = {}
+
+            for row in rows:
+                (daily_insight_id, date_of_insight, _, repo_name, _,
+                 activity, branch_name, insight_text) = row
+
+                if daily_insight_id not in daily_insights_map:
+                    daily_insights_map[daily_insight_id] = DailyInsightDTO(
+                        commitary_id=commitary_id,
+                        repo_name=repo_name,
+                        repo_id=repo_id,
+                        date_of_insight=date_of_insight,
+                        activity=activity,
+                        items=[]
+                    )
+
+                if branch_name and insight_text:
+                    daily_insights_map[daily_insight_id].items.append(
+                        InsightItemDTO(branch_name=branch_name, insight=insight_text)
+                    )
+            
+            # Return the list of insights wrapped in the new DTO
+            return DailyInsightListDTO(insights=list(daily_insights_map.values()))
+
+        except Exception as e:
+            print(f"ERROR: An exception occurred while retrieving insights: {e}")
+            return DailyInsightListDTO(insights=[])
 
 # Singleton instance
 insight_service = InsightService()

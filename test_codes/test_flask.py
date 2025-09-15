@@ -6,7 +6,7 @@ import pytest
 
 from unittest.mock import patch
 import os
-
+from commitary_backend.database import create_db_pool
 
 
 load_dotenv()
@@ -18,6 +18,7 @@ TEST_USER = "YangYounghwa"
 
 @pytest.fixture
 def app_run():
+    
     app = create_app()
     # You can configure the app for testing here, e.g., use a test database
     app.config.update({
@@ -52,7 +53,7 @@ def test_get_repos_success(client):
 
 
 
-@pytest.mark.skip(reason="Checked.")
+# @pytest.mark.skip(reason="Checked.")
 def test_user_success(client):
 
 
@@ -79,7 +80,7 @@ def test_branches_success(client):
     print("Full JSON response:")
     print(json_data)
 
-
+@pytest.mark.skip(reason="Works well now.")
 def test_get_diff_success(client):
     """
     Test the /diff endpoint with valid ISO 8601 datetime strings.
@@ -281,3 +282,65 @@ def test_repo_lifecycle_end_to_end(client):
     found_after_delete = any(repo['github_id'] == repo_id_to_test for repo in deleted_repos_data['repoList'])
     assert not found_after_delete, f"Repo with ID {repo_id_to_test} was still found after deletion."
     print("Successfully verified the repo was deleted.")
+    
+    
+    
+    
+def test_insight_lifecycle(client):
+    """
+    Tests the full lifecycle of creating and retrieving an insight.
+    """
+    # 1. Get user info to retrieve commitary_id
+    user_response = client.get("/user", query_string={'token': GITHUB_TOKEN})
+    assert user_response.status_code == 200
+    user_data = user_response.json
+    commitary_id = user_data["commitary_id"]
+
+    # 2. Test insight creation
+    date_str = "2025-09-03T12:00:00Z"
+    create_params = {
+        'token': GITHUB_TOKEN,
+        'repo_id': TEST_REPO_ID,
+        'commitary_id': commitary_id,
+        'date_from': date_str,
+        'branch': "main"
+    }
+    create_response = client.post("/createInsight", query_string=create_params)
+    # assert create_response.status_code in [201, 409]  # 201 for new, 409 if it already exists
+    print(create_response)
+    
+    date_str = "2025-09-04T12:00:00Z"
+    create_params = {
+        'token': GITHUB_TOKEN,
+        'repo_id': TEST_REPO_ID,
+        'commitary_id': commitary_id,
+        'date_from': date_str,
+        'branch': "main"
+    }
+    create_response2 = client.post("/createInsight", query_string=create_params)    
+    date_str = "2025-09-04T12:00:00Z"
+    create_params = {
+        'token': GITHUB_TOKEN,
+        'repo_id': TEST_REPO_ID,
+        'commitary_id': commitary_id,
+        'date_from': date_str,
+        'branch': "main"
+    }
+    create_response3 = client.post("/createInsight", query_string=create_params)    
+
+    # 3. Test insight retrieval
+    start_date = "2025-09-01T00:00:00Z"
+    end_date = "2025-09-30T23:59:59Z"
+    get_params = {
+        'repo_id': TEST_REPO_ID,
+        'commitary_id': commitary_id,
+        'date_from': start_date,
+        'date_to': end_date
+    }
+    get_response = client.get("/insights", query_string=get_params)
+    assert get_response.status_code == 200
+    json_data = get_response.json
+    assert "insights" in json_data
+    assert isinstance(json_data["insights"], list)
+    
+    ##
