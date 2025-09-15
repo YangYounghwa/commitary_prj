@@ -74,7 +74,7 @@ def create_app():
 
 
     @app.route("/user",methods=['GET'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def getCommitary_id(conn):
         """
         Search DB for user, if found return user commitary_id.
@@ -130,7 +130,7 @@ def create_app():
             return jsonify({"error": "Failed to retrieve or register user information."}), 500
 
     @app.route("/update_user",methods=['POST'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def updateUserDB():
         # TODO : Update DB user info table according to the github.
         #   priority : Low
@@ -172,7 +172,7 @@ def create_app():
 
 
     @app.route("/registerRepo",methods=['POST'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def postRegisterRepo(conn):
         user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
@@ -236,7 +236,7 @@ def create_app():
             return jsonify({"error": f"Failed to register repository: {e}"}), 500
 
     @app.route("/deleteRepo",methods=['DELETE'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def deleteRegisteredRepo(conn):
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
@@ -272,7 +272,7 @@ def create_app():
 
 
     @app.route("/registeredRepos",methods=['GET'])
-    @with_db_connection(db_pool)
+    @with_db_connection
     def getRegisteredRepos(conn):
         commitary_id = request.args.get('commitary_id')
 
