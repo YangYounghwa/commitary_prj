@@ -45,34 +45,10 @@ load_dotenv()
 #         print(f"Database connection failed: {e}")
 #         return None
 
-db_pool = None
-
-def create_db_pool():
-    global db_pool
-    # ... (same logic as before to create the pool from DATABASE_URL)
-    if db_pool:
-        return
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        print("DATABASE_URL environment variable is not set.")
-        return
-    try:
-        url = urlparse(db_url)
-        db_pool = pool.ThreadedConnectionPool(
-            minconn=1, maxconn=20,
-            user=url.username, password=url.password,
-            host=url.hostname, port=url.port,
-            dbname=url.path[1:]
-        )
-        print("Database connection pool created successfully.")
-    except Exception as e:
-        print(f"Failed to create database connection pool: {e}")
-        db_pool = None
-
-create_db_pool()
+from commitary_backend.database import db_pool, create_db_pool
 from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
-
+create_db_pool()
 
 def create_app():
     """
