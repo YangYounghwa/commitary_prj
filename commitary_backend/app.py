@@ -45,7 +45,7 @@ load_dotenv()
 #         print(f"Database connection failed: {e}")
 #         return None
 
-from commitary_backend.database import db_pool, create_db_pool
+from commitary_backend.database import create_db_pool
 from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
 
