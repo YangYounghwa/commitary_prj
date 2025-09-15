@@ -123,7 +123,7 @@ class InsightService():
     def createDailyInsight(self, conn, commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str) -> int:
         """
         Creates a daily insight using a RAG system. It fetches a snapshot from the previous Monday,
-        embeds it, and then uses it as context to analyze the diff for the given day.
+        embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
         """
         try:
             insight_date = start_datetime.date()
@@ -141,19 +141,38 @@ class InsightService():
             monday_date = today - timedelta(days=today.weekday())
             monday_start_datetime = datetime.combine(monday_date, datetime.min.time(), tzinfo=timezone.utc)
 
-            # Step 2: Get Monday's codebase snapshot and embed it
+            # Step 1.5: Check if the snapshot for this Monday already exists in the vector DB
+            snapshot_exists = False
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1 FROM vector_data 
+                    WHERE metadata_repo_id = %s 
+                      AND metadata_target_branch = %s 
+                      AND metadata_lastModifiedTime = %s 
+                      AND metadata_type = 'codebase'
+                    LIMIT 1
+                    """,
+                    (repo_id, branch, monday_start_datetime)
+                )
+                if cur.fetchone():
+                    snapshot_exists = True
+                    print(f"DEBUG: Codebase snapshot for {monday_date} already exists in the vector store.")
+
             repo_dto: RepoDTO = gb_service.getSingleRepoByID(user_token, repo_id)
             if not repo_dto:
                 print("ERROR: Repository not found on GitHub.")
                 return 2
-
-            print(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
-            monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
             
-            if monday_snapshot and monday_snapshot.files:
-                self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
-            else:
-                print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
+            if not snapshot_exists:
+                # Step 2: Get Monday's codebase snapshot and embed it
+                print(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
+                monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
+                
+                if monday_snapshot and monday_snapshot.files:
+                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id, monday_start_datetime)
+                else:
+                    print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
 
             # Step 3: Get the diff from the start of the week to the target date
             end_of_day = datetime.combine(insight_date, datetime.max.time(), tzinfo=timezone.utc)
