@@ -173,7 +173,20 @@ def create_app():
         commits_dto:CommitListDTO =  gb_service.getCommitMsgs(repo_id=repo_id,token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime)
         commits_dict:dict = commits_dto.model_dump()
         return jsonify(commits_dict)
+    @app.route("/githubCommits2")
+    def getCommits():
 
+        user_token = request.args.get('token')
+  
+        startdatetime = request.args.get('datetime_from')
+        enddatetime = request.args.get('datetime_to')
+        branch = request.args.get('branch_name')
+        repo_id = request.args.get('repo_id')
+
+
+        commits_dto:CommitListDTO =  gb_service.getCommitMsgs2(repo_id=repo_id,token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime)
+        commits_dict:dict = commits_dto.model_dump()
+        return jsonify(commits_dict)
 
     @app.route("/registerRepo",methods=['POST'])
     @with_db_connection

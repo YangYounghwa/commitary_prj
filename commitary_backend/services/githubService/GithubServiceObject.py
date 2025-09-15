@@ -219,6 +219,105 @@ class GithubService:
         return CommitListDTO(commitList=commit_list)
         
 
+    def getCommitMsgs2(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
+        """
+        Returns a list of commit messages for a given branch within a time range using GraphQL
+        for more accurate branch association.
+        """
+        repo_dto = self.getSingleRepoByID(token, repo_id)
+        if not repo_dto:
+            print(f"Warning: Repository with ID {repo_id} not found.")
+            return CommitListDTO(commitList=[])
+
+        owner = repo_dto.github_owner_login
+        repo = repo_dto.github_name
+
+        query = """
+        query($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp!, $until: GitTimestamp!) {
+        repository(owner: $owner, name: $repo) {
+            ref(qualifiedName: $branch) {
+            target {
+                ... on Commit {
+                history(since: $since, until: $until) {
+                    edges {
+                    node {
+                        sha
+                        message
+                        author {
+                        name
+                        email
+                        user {
+                            databaseId
+                            login
+                        }
+                        }
+                        committedDate
+                        associatedPullRequests(first: 1) {
+                        edges {
+                            node {
+                            headRefName
+                            }
+                        }
+                        }
+                    }
+                    }
+                }
+                }
+            }
+            }
+        }
+        }
+        """
+        
+        variables = {
+            "owner": owner,
+            "repo": repo,
+            "branch": f"refs/heads/{branch}",
+            "since": startdatetime,
+            "until": enddatetime
+        }
+
+        result = self._execute_graphql(query, variables, token)
+        
+        commit_list = []
+        
+        if result.get("data", {}).get("repository", {}).get("ref"):
+            history = result["data"]["repository"]["ref"]["target"]["history"]["edges"]
+            for edge in history:
+                commit_node = edge["node"]
+                
+                author_data = commit_node.get("author", {})
+                user_data = author_data.get("user", {}) if author_data else {}
+
+                author_id = user_data.get("databaseId")
+                author_name = user_data.get("login") or author_data.get("name")
+                
+                commit_branch_name = branch  # Default to the target branch
+                
+                # If there's an associated pull request, use its head ref name
+                pull_requests = commit_node.get("associatedPullRequests", {}).get("edges", [])
+                if pull_requests:
+                    commit_branch_name = pull_requests[0]["node"]["headRefName"]
+
+                commit_list.append(
+                    CommitMDDTO(
+                        sha=commit_node['sha'],
+                        repo_name=repo,
+                        repo_id=repo_id,
+                        owner_name=owner,
+                        branch_sha=commit_branch_name,
+                        author_github_id=author_id,
+                        author_name=author_name,
+                        author_email=author_data.get("email"),
+                        commit_datetime=datetime.fromisoformat(commit_node['committedDate'].replace('Z', '+00:00')),
+                        commit_msg=commit_node['message']
+                    )
+                )
+
+        return CommitListDTO(commitList=commit_list)
+    
+    
+    
     def _get_sha_by_datetime_after_merge(self, token: str, owner: str, repo: str, merged_into_branch: str, source_branch: str, target_datetime: datetime) -> Optional[str]:
         """
         Finds the latest commit SHA from a source branch that was merged into another
