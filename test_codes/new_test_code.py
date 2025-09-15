@@ -121,6 +121,25 @@ def test_get_commits():
         if json_data:
             print("Full JSON response:")
             print(json.dumps(json_data, indent=2))
+def test_get_commits2():
+    print_test_header("test_get_commits")
+    dt_from_str = "2025-06-27T10:00:00Z"
+    dt_to_str = "2025-08-01T10:00:00Z"
+    query_params = {
+        'token': GITHUB_TOKEN,
+        'repo_id': TEST_REPO_ID,
+        'branch_name': 'yh_13',
+        'datetime_from': dt_from_str,
+        'datetime_to': dt_to_str
+    }
+    response = requests.get(f"{BASE_URL}/githubCommits2", params=query_params)
+    if check_response(response):
+        json_data = get_json_safely(response)
+        if json_data:
+            print("Full JSON response:")
+            print(json.dumps(json_data, indent=2))            
+            
+            
 
 def test_get_diff_invalid_datetime():
     print_test_header("test_get_diff_invalid_datetime")
@@ -258,13 +277,14 @@ if __name__ == "__main__":
         print("CRITICAL ERROR: GITHUB_TOKEN is not set. Please create a .env file or set it as an environment variable.")
     else:
         # Run all the tests
-        test_get_user()
-        test_get_repos()
-        test_get_branches()
-        test_get_diff()
+        # test_get_user()
+        # test_get_repos()
+        # test_get_branches()
+        # test_get_diff()
         test_get_commits()
-        test_get_diff_invalid_datetime()
-        test_repo_lifecycle()
-        test_insight_lifecycle()
+        test_get_commits2()
+        # test_get_diff_invalid_datetime()
+        # test_repo_lifecycle()
+        # test_insight_lifecycle()
 
         print("\nAll tests finished.")
