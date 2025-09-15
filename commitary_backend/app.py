@@ -13,7 +13,7 @@ from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, Di
 from commitary_backend.dto.insightDTO import DailyInsightListDTO, InsightItemDTO, DailyInsightDTO
 from commitary_backend.services.insightService.InsightServiceObject import insight_service
 
-
+import traceback
 import psycopg2
 
 
@@ -125,6 +125,8 @@ def create_app():
             user_dict = userinfo.model_dump()
             return jsonify(user_dict)
         else:
+            
+            traceback.print_exc()
             return jsonify({"error": "Failed to retrieve or register user information."}), 500
 
     @app.route("/update_user",methods=['POST'])
