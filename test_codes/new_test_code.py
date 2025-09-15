@@ -298,7 +298,7 @@ if __name__ == "__main__":
         # test_get_branches()
         # test_get_diff()
         test_get_commits()
-        # test_get_commits2()
+        test_get_commits2()
         # test_get_diff_invalid_datetime()
         # test_repo_lifecycle()
         # test_insight_lifecycle()
