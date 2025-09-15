@@ -26,9 +26,8 @@ def with_db_connection(func):
     def wrapper(*args, **kwargs):
         try:
             conn = get_db_conn()
-            result = func(conn, *args, **kwargs)
-            # The commit should happen inside your view function where you make changes
-            # conn.commit() 
+            result = func(*args, conn=conn, **kwargs)
+
             return result
         except Exception as e:
             # Rollback in case of error

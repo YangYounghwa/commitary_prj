@@ -119,7 +119,7 @@ class InsightService():
     
     
     @with_db_connection
-    def createDailyInsight(self, conn, commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str) -> int:
+    def createDailyInsight(self,  commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str,conn=None) -> int:
         """
         Creates a daily insight using a RAG system. It fetches a snapshot from the previous Monday,
         embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
@@ -232,7 +232,7 @@ class InsightService():
             return 2 # Status: Error
     
     @with_db_connection
-    def getInsights(self, conn, commitary_id: int, repo_id: int, start_datetime: datetime, end_datetime: datetime) -> DailyInsightListDTO:
+    def getInsights(self,commitary_id: int, repo_id: int, start_datetime: datetime, end_datetime: datetime,conn=None) -> DailyInsightListDTO:
         """
         Retrieves daily insights for a given user and repository within a specified date range.
         """
