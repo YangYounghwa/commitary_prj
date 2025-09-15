@@ -2,10 +2,11 @@ import os
 from typing import List, Optional
 import psycopg2
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
+from commitary_backend.services.insightService.RAGService import rag_service
 from commitary_backend.dto.insightDTO import DailyInsightDTO, InsightItemDTO
-from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, CommitListDTO, DiffDTO
+from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, CommitListDTO, DiffDTO, RepoDTO
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 
 
@@ -72,44 +73,94 @@ CREATE TABLE IF NOT EXISTS "insight_item" (
 
 class InsightService():
     @with_db_connection(db_pool)
-    def createDailyInsight(self,conn,commitary_id, repo_id,start_datetime:datetime,branch)->int: #status
-        # transform start_datetime into date 
-        # DB connection : conn
-        
-        
-        # First connect db to check if there are insight of the date
-        # If found, return http code which means already exists. 
-        # IF not found, 
-        # Get Monday datetime  of the start time
-        # Get the diff from the date begin and date end
-        # gb_service.getDiffByIdTime2()->DiffDTO
-            # If null return no insight, 
-        # From DiffDTO get list of patch str, merge all str with filename on top of each str,
-        # Create a prompt according to that. "From this give me code insights concisely : {pathes_str}"
-        # Search the vector db whether if the vector files exists or not.
-        # if not
-        #   Get snapshot of the date.
-        #   need to add getSnapshotByIdDatetime() in GithubServiceObject.py
-        #   After getting the CodebaseDTO put them into RAG system. 
-            # Make a class for this. 
-            # Split the code. 
-            # embed them.
-            #  put in to the vector store
-            # vectorstore as a 
-        # From prompt search the rag system. for related code.
-        # Using openai llm get the result.
-        # create InsightItemDTO for a single branch and put them into DailyInsightDTO
-        # DailyInsightDTO
-        # 
-        # using conn save them into the db
-       
-       
-        
-        return
+    def createDailyInsight(self, conn, commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str) -> int:
+        """
+        Creates a daily insight for a given branch and saves it to the database.
+        Returns 0 on success, -1 on no activity, 1 on already exists, and 2 on error.
+        """
+        try:
+            insight_date = start_datetime.date()
+            print(f"DEBUG: Processing insight for date: {insight_date} for repo_id: {repo_id}")
+
+            # Step 1: Check if insight for this date already exists
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s",
+                    (commitary_id, repo_id, insight_date)
+                )
+                if cur.fetchone():
+                    print("DEBUG: Insight already exists for this date.")
+                    return 1  # Status: Already exists
+
+            # Step 2: Get the repository metadata to find owner and name
+            repo_dto: RepoDTO = gb_service.getSingleRepoByID(user_token, repo_id)
+            if not repo_dto:
+                print("ERROR: Repository not found on GitHub.")
+                return 2  # Status: Error
+
+            # Step 3: Get the diff from the date begin and date end
+            # Use UTC to be consistent with GitHub's ISO 8601 timestamps
+            start_of_day = datetime.combine(insight_date, datetime.min.time(), tzinfo=timezone.utc)
+            end_of_day = datetime.combine(insight_date, datetime.max.time(), tzinfo=timezone.utc)
+            
+            diff_dto: DiffDTO = gb_service.getDiffByIdTime2(
+                user_token=user_token,
+                repo_id=repo_id,
+                branch_from=branch,
+                branch_to=branch,
+                datetime_from=start_of_day,
+                datetime_to=end_of_day
+            )
+
+            # Step 4: Handle no diff
+            if not diff_dto or not diff_dto.files:
+                print("DEBUG: No activity found for the specified date.")
+                activity_status = False
+                
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
+                        (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                    )
+                    conn.commit()
+                return -1 # Status: No activity
+            
+            activity_status = True
+            
+            # Step 5: Create a prompt and get the insight using the RAG service
+            insight_item: InsightItemDTO = rag_service.generate_insight_from_diff(
+                repo_dto.github_name, branch, diff_dto
+            )
+
+            # Step 6: Save the insight into the database
+            with conn.cursor() as cur:
+                # Insert into daily_insight table
+                cur.execute(
+                    "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
+                    (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                )
+                daily_insight_id = cur.fetchone()[0]
+
+                # Insert into insight_item table
+                cur.execute(
+                    "INSERT INTO insight_item (repo_name, repo_id, branch_name, insight, daily_insight_id) VALUES (%s, %s, %s, %s, %s)",
+                    (repo_dto.github_name, repo_id, branch, insight_item.insight, daily_insight_id)
+                )
+
+                conn.commit()
+            
+            print("DEBUG: Insight successfully created and saved.")
+            return 0 # Status: Success
+
+        except Exception as e:
+            conn.rollback()
+            print(f"ERROR: An exception occurred while creating insight: {e}")
+            return 2 # Status: Error
     
     @with_db_connection(db_pool)
     def getInsights(self,conn,commitary_id,repo_id,start_datetime,end_datetime)-> List[DailyInsightDTO]:
         return  
+
 
 # Singleton instance
 insight_service = InsightService()
