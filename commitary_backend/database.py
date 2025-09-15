@@ -17,7 +17,7 @@ def create_db_pool(app):
     try:
         url = urlparse(db_url)
         db_pool = pool.ThreadedConnectionPool(
-            minconn=1, maxconn=20,
+            minconn=1, maxconn=100,
             user=url.username, password=url.password,
             host=url.hostname, port=url.port,
             dbname=url.path[1:]
