@@ -4,17 +4,16 @@ from psycopg2 import pool
 from dotenv import load_dotenv
 load_dotenv()
 
-db_pool = None
+def create_db_pool(app):
+    """Creates the database pool and attaches it to the Flask app object."""
+    # Prevent creating the pool if it already exists on the app
+    if 'db_pool' in app.extensions:
+        return
 
-def create_db_pool():
-    global db_pool
-    if db_pool:
-        return
     db_url = os.getenv("DATABASE_URL")
-    # print("DEBUG : " + db_url)
     if not db_url:
-        print("DATABASE_URL environment variable is not set.")
-        return
+        raise RuntimeError("DATABASE_URL environment variable is not set.")
+    
     try:
         url = urlparse(db_url)
         db_pool = pool.ThreadedConnectionPool(
@@ -23,7 +22,8 @@ def create_db_pool():
             host=url.hostname, port=url.port,
             dbname=url.path[1:]
         )
+        # Attach the pool to the app using the standard extensions pattern
+        app.extensions['db_pool'] = db_pool
         print("Database connection pool created successfully.")
     except Exception as e:
-        print(f"Failed to create database connection pool: {e}")
-        db_pool = None
+        raise RuntimeError(f"Failed to create database connection pool: {e}")

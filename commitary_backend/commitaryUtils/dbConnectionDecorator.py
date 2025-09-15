@@ -2,44 +2,41 @@ import functools
 from flask import jsonify
 
 
-import functools
-from flask import jsonify
-# ADD THIS IMPORT
-from commitary_backend.database import db_pool
 
-# CHANGE THE FUNCTION SIGNATURE
+import functools
+from flask import jsonify, current_app, g
+
+def get_db_conn():
+    """Opens a new database connection if there is none yet for the
+    current application context.
+    """
+    if 'db_conn' not in g:
+        g.db_conn = current_app.extensions['db_pool'].getconn()
+    return g.db_conn
+
+def close_db_conn(e=None):
+    """Closes the database connection at the end of the request."""
+    conn = g.pop('db_conn', None)
+    if conn is not None:
+        current_app.extensions['db_pool'].putconn(conn)
+
 def with_db_connection(func):
-    """
-    A decorator for handling database connections.
-    It retrieves the pool at runtime and passes the connection object 
-    as the first argument to the decorated function.
-    """
+    """A decorator to handle database connections."""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-
-        print(f"DEBUG: @with_db_connection decorator called for function: {func.__name__}")
-
-        if not db_pool:
-            print("DEBUG: db_pool is not available.")
-            return jsonify({"error": "Database connection pool not available."}), 500
-
-        conn = None
         try:
-            print("DEBUG: Attempting to get connection from db_pool.")
-            conn = db_pool.getconn()
-            print("DEBUG: Successfully got connection from db_pool.")
-            # Pass the connection object to the decorated function
+            conn = get_db_conn()
             result = func(conn, *args, **kwargs)
+            # The commit should happen inside your view function where you make changes
+            # conn.commit() 
             return result
         except Exception as e:
+            # Rollback in case of error
+            conn = g.get('db_conn', None)
             if conn:
                 conn.rollback()
             print(f"An error occurred in a database operation: {e}")
             import traceback
             traceback.print_exc()
             return jsonify({"error": "An internal server error occurred."}), 500
-        finally:
-            if conn:
-                print("DEBUG: Returning connection to db_pool.")
-                db_pool.putconn(conn)
     return wrapper

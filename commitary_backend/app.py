@@ -55,7 +55,7 @@ def create_app():
     Application factory function for the Flask app.
     
     """
-    create_db_pool()
+    create_db_pool(app)
     app = Flask(__name__)
     CORS(app)
 
