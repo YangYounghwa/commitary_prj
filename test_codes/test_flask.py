@@ -341,3 +341,5 @@ def test_insight_lifecycle(client):
     json_data = get_response.json
     assert "insights" in json_data
     assert isinstance(json_data["insights"], list)
+    
+    ##
