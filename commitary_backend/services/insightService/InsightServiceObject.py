@@ -169,9 +169,11 @@ class InsightService():
                 monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
                 
                 if monday_snapshot and monday_snapshot.files:
-                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id, monday_start_datetime)
+                    # Corrected line: removed the extra argument
+                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
                 else:
                     print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
+
 
             # Step 3: Get the diff from the start of the week to the target date
             end_of_day = datetime.combine(insight_date, datetime.max.time(), tzinfo=timezone.utc)
