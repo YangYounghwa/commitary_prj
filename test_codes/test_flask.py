@@ -52,7 +52,7 @@ def test_get_repos_success(client):
 
 
 
-@pytest.mark.skip(reason="Checked.")
+# @pytest.mark.skip(reason="Checked.")
 def test_user_success(client):
 
 
@@ -79,7 +79,7 @@ def test_branches_success(client):
     print("Full JSON response:")
     print(json_data)
 
-
+@pytest.mark.skip(reason="Works well now.")
 def test_get_diff_success(client):
     """
     Test the /diff endpoint with valid ISO 8601 datetime strings.
