@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS "insight_item" (
 );
 '''
 
-
+from dotenv import load_dotenv
+load_dotenv()
 
 
 
@@ -85,7 +86,7 @@ class InsightService():
         # Assuming DATABASE_URL is in the environment for PGVector
         self.connection_string = os.getenv("DATABASE_URL")
         self.vector_store = PGVector(
-            connection_string=self.connection_string,
+            connection=self.connection_string,
             embedding_function=self.embeddings,
             collection_name="codebase_snapshots"
         )
