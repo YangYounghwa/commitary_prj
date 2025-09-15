@@ -10,6 +10,9 @@ from psycopg2 import pool
 
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
 from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, RepoListDTO, UserGBInfoDTO
+from commitary_backend.dto.insightDTO import InsightItemDTO, DailyInsightDTO
+from commitary_backend.services.insightService.InsightServiceObject import insight_service
+
 
 import psycopg2
 
@@ -425,7 +428,17 @@ def create_app():
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         start_date = request.args.get('date_from')
-        end_date = request.args.get('date_to')
+        branch = request.args.get('branch')
+        
+        ## start_date to datetime object
+        ## end_date to datetime object 
+        insight_service.createInsight(commitary_id=commitary_id, 
+                                      repo_id=repo_id,
+                                      start_date=start_date,branch=branch)
+        
+        #return success code
+        return 
+        
 
     @app.route('/insights',methods=['GET'])
     @with_db_connection(db_pool)
@@ -433,6 +446,10 @@ def create_app():
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         date_from = request.args('date_from')
+        #
+        # list of dailyInsightDTO
+        # Parse them into json and return
+        return
 
 
     return app
