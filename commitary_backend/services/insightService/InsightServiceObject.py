@@ -201,7 +201,7 @@ class InsightService():
             # Step 5: Retrieve relevant documents from the vector store
             diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
             retriever = self.vector_store.as_retriever()
-            retrieved_docs = retriever.get_relevant_documents(diff_content_for_retrieval)
+            retrieved_docs = retriever.invoke(diff_content_for_retrieval)
             print(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
 
             # Step 6: Generate insight with RAG context
