@@ -46,7 +46,8 @@ load_dotenv()
 #         return None
 
 from commitary_backend.database import create_db_pool
-from .commitaryUtils.dbConnectionDecorator import with_db_connection
+from commitary_backend.commitaryUtils.dbConnectionDecorator import close_db_conn
+from commitary_backend.commitaryUtils.dbConnectionDecorator import with_db_connection
 
 
 
@@ -58,6 +59,7 @@ def create_app():
     
     app = Flask(__name__)
     create_db_pool(app)
+    app.teardown_appcontext(close_db_conn)
     CORS(app)
 
     # --- Configuration and Sanity Check ---
