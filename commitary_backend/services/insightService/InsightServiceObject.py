@@ -13,7 +13,6 @@ from datetime import date, datetime, timedelta, timezone
 
 
 
-from commitary_backend.database import db_pool
 
 from commitary_backend.commitaryUtils.dbConnectionDecorator import with_db_connection
 
