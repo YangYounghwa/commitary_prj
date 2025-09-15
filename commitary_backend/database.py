@@ -11,6 +11,7 @@ def create_db_pool():
     if db_pool:
         return
     db_url = os.getenv("DATABASE_URL")
+    print("DEBUG : " + db_url)
     if not db_url:
         print("DATABASE_URL environment variable is not set.")
         return
