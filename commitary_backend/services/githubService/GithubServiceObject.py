@@ -219,7 +219,7 @@ class GithubService:
         return CommitListDTO(commitList=commit_list)
         
 
-    def getCommitMsgs3(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
+    def getCommitMsgs2(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
         """
         Returns a list of commit messages for a given branch within a time range using GraphQL
         for more accurate branch association. This version is more robust.
