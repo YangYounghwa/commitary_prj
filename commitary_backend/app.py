@@ -10,7 +10,7 @@ from psycopg2 import pool
 
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
 from commitary_backend.dto.gitServiceDTO import BranchListDTO, CommitListDTO, DiffDTO, RepoDTO, RepoListDTO, UserGBInfoDTO
-from commitary_backend.dto.insightDTO import InsightItemDTO, DailyInsightDTO
+from commitary_backend.dto.insightDTO import DailyInsightListDTO, InsightItemDTO, DailyInsightDTO
 from commitary_backend.services.insightService.InsightServiceObject import insight_service
 
 
@@ -387,8 +387,6 @@ def create_app():
             print(f"Invalid parameter type or format. Error: {e}")
             return "Invalid parameter type or format. Datetime must be in ISO format and repo_id must be an integer.", 400
 
-
-        # Assuming 'api_service' is an instance of YourApiService
         
         
         # Call the core logic function with all the arguments, including the default_branch
@@ -423,33 +421,79 @@ def create_app():
 
 
     @app.route("/createInsight",methods=['POST'])
-    @with_db_connection(db_pool)
     def createInsight():
+        user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
-        start_date = request.args.get('date_from')
+        start_date_str = request.args.get('date_from')
         branch = request.args.get('branch')
+
+        if not all([user_token, repo_id, commitary_id, start_date_str, branch]):
+            return jsonify({"error": "Missing one or more required parameters."}), 400
+
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+            if start_date_str.endswith('Z'):
+                start_date_str = start_date_str.replace('Z', '+00:00')
+            start_datetime = datetime.fromisoformat(start_date_str)
+        except (ValueError, TypeError) as e:
+            return jsonify({"error": f"Invalid parameter type or format: {e}"}), 400
+
         
-        ## start_date to datetime object
-        ## end_date to datetime object 
-        insight_service.createInsight(commitary_id=commitary_id, 
-                                      repo_id=repo_id,
-                                      start_date=start_date,branch=branch)
+        status_code = insight_service.createDailyInsight(
+            commitary_id=commitary_id,
+            repo_id=repo_id,
+            start_datetime=start_datetime,
+            branch=branch,
+            user_token=user_token
+        )
+
+        status_messages = {
+            0: ("Insight created successfully.", 201),
+            1: ("Insight for this date already exists.", 409),
+            -1: ("No activity found for the specified date.", 200),
+            2: ("An error occurred while creating the insight.", 500)
+        }
         
-        #return success code
-        return 
+        message, http_status = status_messages.get(status_code, ("An unknown error occurred.", 500))
         
+        return jsonify({"message": message}), http_status
+
 
     @app.route('/insights',methods=['GET'])
-    @with_db_connection(db_pool)
     def getInsights():
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
-        date_from = request.args('date_from')
-        #
-        # list of dailyInsightDTO
-        # Parse them into json and return
-        return
+        date_from_str = request.args.get('date_from')
+        date_to_str = request.args.get('date_to')
+
+        if not all([repo_id, commitary_id, date_from_str, date_to_str]):
+            return jsonify({"error": "Missing one or more required parameters"}), 400
+        
+        try:
+            repo_id = int(repo_id)
+            commitary_id = int(commitary_id)
+            
+            if date_from_str.endswith('Z'):
+                date_from_str = date_from_str.replace('Z', '+00:00')
+            if date_to_str.endswith('Z'):
+                date_to_str = date_to_str.replace('Z', '+00:00')
+                
+            datetime_from = datetime.fromisoformat(date_from_str)
+            datetime_to = datetime.fromisoformat(date_to_str)
+        except (ValueError, TypeError) as e:
+            return jsonify({"error": f"Invalid parameter type or format: {e}"}), 400
+
+
+        insight_list_dto: DailyInsightListDTO = insight_service.getInsights(
+            commitary_id=commitary_id,
+            repo_id=repo_id,
+            start_datetime=datetime_from,
+            end_datetime=datetime_to
+        )
+        
+        return jsonify(insight_list_dto.model_dump())
 
 
     return app

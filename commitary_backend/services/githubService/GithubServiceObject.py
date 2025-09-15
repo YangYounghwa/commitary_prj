@@ -689,6 +689,22 @@ class GithubService:
             print("DEBUG: Successfully generated DiffDTO.")
         
         return diff_dto
+    
+    def getSnapshotByIdDatetime(self, token: str, repo_id: int, branch: str, time: datetime) -> Optional[CodebaseDTO]:
+        '''
+        Gets a snapshot of the repository at a specific time, using repo_id.
+        '''
+        repo_dto = self.getSingleRepoByID(token, repo_id)
+        if not repo_dto:
+            return None
+        owner = repo_dto.github_owner_login
+        repo_name = repo_dto.github_name
+        
+        sha = self._get_sha_by_datetime(token, owner, repo_name, branch, time)
+        if not sha:
+            return None
+        
+        return self.getSnapshotBySHA(user=None, token=token, owner=owner, repo=repo_name, sha=sha)
 
 
  

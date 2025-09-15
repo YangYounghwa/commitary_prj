@@ -22,3 +22,6 @@ class DailyInsightDTO(BaseModel):
     date_of_insight: date
     activity: bool
     items: List[InsightItemDTO] = []
+    
+class DailyInsightListDTO(BaseModel):
+    insights: List[DailyInsightDTO]
