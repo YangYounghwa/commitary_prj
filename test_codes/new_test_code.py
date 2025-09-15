@@ -16,7 +16,7 @@ print(f"Using GitHub Token: {'*' * 10}{GITHUB_TOKEN[-4:]}" if GITHUB_TOKEN else 
 
 
 # Test constants
-TEST_REPO_ID = 1025497696
+TEST_REPO_ID = 1024670234
 TEST_USER = "YangYounghwa"
 
 # --- Helper Functions ---
@@ -106,12 +106,12 @@ def test_get_diff():
 
 def test_get_commits():
     print_test_header("test_get_commits")
-    dt_from_str = "2025-06-27T10:00:00Z"
-    dt_to_str = "2025-08-25T10:00:00Z"
+    dt_from_str = "2025-07-20T10:00:00Z"
+    dt_to_str = "2025-07-29T10:00:00Z"
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_name': 'yh_1',
+        'branch_name': 'yh_9',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str
     }
@@ -134,12 +134,12 @@ def test_get_commits():
 
 def test_get_commits2():
     print_test_header("test_get_commits2") # Changed header for clarity
-    dt_from_str = "2025-06-27T10:00:00Z"
-    dt_to_str = "2025-08-25T10:00:00Z"
+    dt_from_str = "2025-07-20T10:00:00Z"
+    dt_to_str = "2025-07-29T10:00:00Z"
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_name': 'yh_1',
+        'branch_name': 'yh_9',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str
     }
@@ -297,8 +297,8 @@ if __name__ == "__main__":
         # test_get_repos()
         # test_get_branches()
         # test_get_diff()
-        # test_get_commits()
-        test_get_commits2()
+        test_get_commits()
+        # test_get_commits2()
         # test_get_diff_invalid_datetime()
         # test_repo_lifecycle()
         # test_insight_lifecycle()
