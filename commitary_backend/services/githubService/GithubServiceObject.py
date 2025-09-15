@@ -219,10 +219,10 @@ class GithubService:
         return CommitListDTO(commitList=commit_list)
         
 
-    def getCommitMsgs2(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
+    def getCommitMsgs3(self, repo_id: int, token: str, branch: str, startdatetime: str, enddatetime: str) -> CommitListDTO:
         """
         Returns a list of commit messages for a given branch within a time range using GraphQL
-        for more accurate branch association.
+        for more accurate branch association. This version is more robust.
         """
         repo_dto = self.getSingleRepoByID(token, repo_id)
         if not repo_dto:
@@ -233,7 +233,7 @@ class GithubService:
         repo = repo_dto.github_name
 
         query = """
-        query($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp!, $until: GitTimestamp!) {
+        query($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp, $until: GitTimestamp) {
         repository(owner: $owner, name: $repo) {
             ref(qualifiedName: $branch) {
             target {
@@ -241,7 +241,7 @@ class GithubService:
                 history(since: $since, until: $until) {
                     edges {
                     node {
-                        sha
+                        oid
                         message
                         author {
                         name
@@ -253,10 +253,8 @@ class GithubService:
                         }
                         committedDate
                         associatedPullRequests(first: 1) {
-                        edges {
-                            node {
+                        nodes {
                             headRefName
-                            }
                         }
                         }
                     }
@@ -268,40 +266,38 @@ class GithubService:
         }
         }
         """
-        
+
         variables = {
             "owner": owner,
             "repo": repo,
-            "branch": f"refs/heads/{branch}",
+            "branch": branch,
             "since": startdatetime,
             "until": enddatetime
         }
 
         result = self._execute_graphql(query, variables, token)
-        
         commit_list = []
-        
-        if result.get("data", {}).get("repository", {}).get("ref"):
+
+        if result.get("data") and result["data"].get("repository") and result["data"]["repository"].get("ref"):
             history = result["data"]["repository"]["ref"]["target"]["history"]["edges"]
             for edge in history:
                 commit_node = edge["node"]
                 
                 author_data = commit_node.get("author", {})
-                user_data = author_data.get("user", {}) if author_data else {}
+                user_data = author_data.get("user") if author_data and author_data.get("user") else {}
 
-                author_id = user_data.get("databaseId")
-                author_name = user_data.get("login") or author_data.get("name")
+                author_id = user_data.get("databaseId") if user_data else None
+                author_name = user_data.get("login") if user_data else author_data.get("name")
                 
-                commit_branch_name = branch  # Default to the target branch
+                commit_branch_name = branch
                 
-                # If there's an associated pull request, use its head ref name
-                pull_requests = commit_node.get("associatedPullRequests", {}).get("edges", [])
+                pull_requests = commit_node.get("associatedPullRequests", {}).get("nodes", [])
                 if pull_requests:
-                    commit_branch_name = pull_requests[0]["node"]["headRefName"]
+                    commit_branch_name = pull_requests[0]["headRefName"]
 
                 commit_list.append(
                     CommitMDDTO(
-                        sha=commit_node['sha'],
+                        sha=commit_node['oid'],
                         repo_name=repo,
                         repo_id=repo_id,
                         owner_name=owner,
