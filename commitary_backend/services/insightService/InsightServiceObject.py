@@ -86,11 +86,10 @@ class InsightService():
         # Assuming DATABASE_URL is in the environment for PGVector
         self.connection_string = os.getenv("DATABASE_URL")
         self.vector_store = PGVector(
-            connection=self.connection_string,
-            embedding_function=self.embeddings,
-            collection_name="codebase_snapshots"
-        )
-
+    connection=self.connection_string,
+    embeddings=self.embeddings,
+    collection_name="codebase_snapshots"
+)
     def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int):
         """
         Chunks, embeds, and stores the codebase snapshot in the vector database.
