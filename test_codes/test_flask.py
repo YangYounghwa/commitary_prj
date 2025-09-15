@@ -6,7 +6,7 @@ import pytest
 
 from unittest.mock import patch
 import os
-
+from commitary_backend.database import create_db_pool
 
 
 load_dotenv()
@@ -18,6 +18,7 @@ TEST_USER = "YangYounghwa"
 
 @pytest.fixture
 def app_run():
+    create_db_pool()
     app = create_app()
     # You can configure the app for testing here, e.g., use a test database
     app.config.update({
