@@ -48,13 +48,14 @@ load_dotenv()
 from commitary_backend.database import db_pool, create_db_pool
 from .commitaryUtils.dbConnectionDecorator import with_db_connection
 
-create_db_pool()
+
 
 def create_app():
     """
     Application factory function for the Flask app.
     
     """
+    create_db_pool()
     app = Flask(__name__)
     CORS(app)
 
