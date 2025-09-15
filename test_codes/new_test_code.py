@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # IMPORTANT: Set this to the address of your running Flask server
-BASE_URL = "http://3.37.27.11/:5000"  # Example: "http://your-remote-server.com"
+BASE_URL = "http://3.37.27.11:5000"  # Example: "http://your-remote-server.com"
 
 # Get the GitHub token from environment variables
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -107,11 +107,11 @@ def test_get_diff():
 def test_get_commits():
     print_test_header("test_get_commits")
     dt_from_str = "2025-06-27T10:00:00Z"
-    dt_to_str = "2025-08-01T10:00:00Z"
+    dt_to_str = "2025-08-25T10:00:00Z"
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_name': 'yh_13',
+        'branch_name': 'yh_1',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str
     }
@@ -119,16 +119,27 @@ def test_get_commits():
     if check_response(response):
         json_data = get_json_safely(response)
         if json_data:
-            print("Full JSON response:")
-            print(json.dumps(json_data, indent=2))
+            # Define the output filename
+            output_filename = "github_commits_response.json"
+            
+            # Open the file in write mode ('w') and save the data
+            # encoding='utf-8' is best practice for handling text data
+            with open(output_filename, 'w', encoding='utf-8') as f:
+                # json.dump() writes the object to the file
+                # indent=2 makes the JSON file human-readable
+                json.dump(json_data, f, indent=2)
+            
+            print(f"Full JSON response successfully saved to {output_filename}")
+
+
 def test_get_commits2():
-    print_test_header("test_get_commits")
+    print_test_header("test_get_commits2") # Changed header for clarity
     dt_from_str = "2025-06-27T10:00:00Z"
-    dt_to_str = "2025-08-01T10:00:00Z"
+    dt_to_str = "2025-08-25T10:00:00Z"
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_name': 'yh_13',
+        'branch_name': 'yh_1',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str
     }
@@ -136,9 +147,14 @@ def test_get_commits2():
     if check_response(response):
         json_data = get_json_safely(response)
         if json_data:
-            print("Full JSON response:")
-            print(json.dumps(json_data, indent=2))            
-            
+            # Define a different output filename
+            output_filename = "github_commits_response2.json"
+
+            # Open the file in write mode ('w') and save the data
+            with open(output_filename, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=2)
+
+            print(f"Full JSON response successfully saved to {output_filename}")
             
 
 def test_get_diff_invalid_datetime():

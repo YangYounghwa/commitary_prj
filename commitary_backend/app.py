@@ -174,7 +174,7 @@ def create_app():
         commits_dict:dict = commits_dto.model_dump()
         return jsonify(commits_dict)
     @app.route("/githubCommits2")
-    def getCommits():
+    def getCommits2():
 
         user_token = request.args.get('token')
   
