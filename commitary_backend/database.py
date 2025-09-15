@@ -1,6 +1,8 @@
 import os
 from urllib.parse import urlparse
 from psycopg2 import pool
+from dotenv import load_dotenv
+load_dotenv()
 
 db_pool = None
 
