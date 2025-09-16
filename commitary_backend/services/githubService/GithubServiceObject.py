@@ -274,6 +274,15 @@ class GithubService:
 
         owner = repo_dto.github_owner_login
         repo = repo_dto.github_name
+        # FIX: Parse the incoming datetime strings into timezone-aware datetime objects.
+        # This ensures the timestamps sent to the GraphQL API are explicit UTC,
+        # preventing timezone misinterpretation.
+        try:
+            since_dt = datetime.fromisoformat(startdatetime.replace('Z', '+00:00'))
+            until_dt = datetime.fromisoformat(enddatetime.replace('Z', '+00:00'))
+        except ValueError as e:
+            print(f"ERROR: Invalid datetime format in getCommitMsgs2. {e}")
+            return CommitListDTO(commitList=[])
 
         query = """
         query($owner: String!, $repo: String!, $branch: String!, $since: GitTimestamp, $until: GitTimestamp) {
@@ -314,8 +323,8 @@ class GithubService:
             "owner": owner,
             "repo": repo,
             "branch": branch,
-            "since": startdatetime,
-            "until": enddatetime
+            "since": since_dt.isoformat(),
+            "until": until_dt.isoformat()
         }
 
         result = self._execute_graphql(query, variables, token)
