@@ -394,8 +394,10 @@ def create_app():
             branch=branch_to,
             datetime_from=datetime_from,
             datetime_to=datetime_to,
-            default_merged_branch=default_branch
+            # default_merged_branch=default_branch
         )
+            
+            
             
         
         else:

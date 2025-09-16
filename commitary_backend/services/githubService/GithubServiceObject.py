@@ -809,7 +809,7 @@ class GithubService:
         to the last commit in the time range, ensuring that only changes within that
         period on that specific branch are included.
         """
-        print("DEBUG: Starting getDiffByIdTime3 function.")
+        print(f"{datetime.now()} DEBUG: Starting getDiffByIdTime3 function.")
         repo_dto = self.getSingleRepoByID(user_token, repo_id)
         if not repo_dto:
             print("Error: Repository not found.")
