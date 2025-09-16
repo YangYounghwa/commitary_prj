@@ -9,6 +9,8 @@ from commitary_backend.dto.insightDTO import InsightItemDTO
 from dotenv import load_dotenv
 import logging
 
+from langchain.callbacks import get_openai_callback
+
 
 load_dotenv() # Loads env from .env
 
@@ -29,16 +31,12 @@ class RAGService:
             )
 
         # Combine all file patches into a single string
-        
-        
-        
         MAX_PATCH_LENGTH_PER_FILE = 1500  # Adjust this value as needed
 
         diff_text = ""
         for file in diff_dto.files:
             patch_content = file.patch if file.patch else ""
             
-            # Check if the patch content exceeds the per-file limit
             if len(patch_content) > MAX_PATCH_LENGTH_PER_FILE:
                 patch_content = patch_content[:MAX_PATCH_LENGTH_PER_FILE] + "\n... (patch truncated)"
 
@@ -74,12 +72,15 @@ class RAGService:
 
         chain = prompt | self.llm
         # Corrected: Pass the actual values to the invoke method
-        response = chain.invoke({
+        response = None 
+        with get_openai_callback() as cb:
+            response = chain.invoke({
             "repo_name": repo_name,
             "branch_name": branch_name,
             "context_text": context_text,
             "diff_text": diff_text
-        })
+            })
+            current_app.logger.debug(f"OpenAI Token Usage for Insight Generation : {cb}")
 
         return InsightItemDTO(
             branch_name=branch_name,

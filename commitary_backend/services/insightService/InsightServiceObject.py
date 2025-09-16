@@ -10,7 +10,7 @@ from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, Commit
 
 from datetime import date, datetime, timedelta, timezone
 
-
+from langchain.callbacks import get_openai_callback
 from flask import current_app
 import logging
 
@@ -106,10 +106,12 @@ class InsightService():
             
             # Process documents in batches to avoid timeouts and memory issues.
             batch_size = 16
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i:i + batch_size]
-                self.vector_store.add_documents(batch)
-                current_app.logger.debug(f"  - Successfully processed batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+            with get_openai_callback() as cb:
+                for i in range(0, len(documents), batch_size):
+                    batch = documents[i:i + batch_size]
+                    self.vector_store.add_documents(batch)
+                    current_app.logger.debug(f"  - Successfully processed batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+                current_app.logger.debug(f"OpenAI Token Usage for Embedding: {cb}")
 
             current_app.logger.debug(f"Successfully embedded and stored all document chunks.")
         else:
