@@ -94,7 +94,7 @@ class InsightService():
         self.embeddings = LoggingOpenAIEmbeddings()
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
-            chunk_overlap=200,
+            chunk_overlap=150,
             length_function=len
         )
         # Assuming DATABASE_URL is in the environment for PGVector
@@ -253,7 +253,7 @@ class InsightService():
                 diff_content_for_retrieval = diff_content_for_retrieval[:MAX_RETRIEVAL_QUERY_LENGTH]
  
 
-            retriever = self.vector_store.as_retriever(search_kwargs={'k': 2,
+            retriever = self.vector_store.as_retriever(search_kwargs={'k': 3,
                                                                               'filter': {
             "$and": [
                 {"commitary_user": commitary_id},

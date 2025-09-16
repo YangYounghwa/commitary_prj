@@ -31,7 +31,7 @@ class RAGService:
             )
 
         # Combine all file patches into a single string
-        MAX_PATCH_LENGTH_PER_FILE = 1500  # Adjust this value as needed
+        MAX_PATCH_LENGTH_PER_FILE = 2000  # Adjust this value as needed
 
         diff_text = ""
         for file in diff_dto.files:
@@ -46,7 +46,7 @@ class RAGService:
             
             
             
-        MAX_DIFF_LENGTH = 7000
+        MAX_DIFF_LENGTH = 8000
         
         
         if len(diff_text) > MAX_DIFF_LENGTH:
@@ -65,7 +65,7 @@ class RAGService:
         current_app.logger.debug(f"  - Diff Text Length:    {len(diff_text)} characters")
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert software developer and code reviewer. Your task is to provide a professional analysis of the provided code changes."),
+            ("system", "You are an expert software developer. Your task is to provide a professional analysis of the provided code changes."),
 
 ("user", """
 Analyze the following code changes from the repository '{repo_name}' on branch '{branch_name}'.
@@ -78,13 +78,13 @@ Present your analysis in the following structure, in Korean:
 
 **2. 주요 변경 내역 (List of Key Changes)**
 * Create a bulleted list of the specific modifications.
-* For each item, cite the relevant filenames, classes, or functions.
-* Briefly explain what was changed and the reason for the change.
+* Cite the relevant filenames, classes, or functions for import changes.
+* Briefly explain what was changed.
 
 **3. 기술적 분석 및 인사이트 (Technical Analysis and Insight)**
-* Provide deeper insights into the changes. Consider architectural implications, potential risks, performance improvements, or adherence to coding best practices. Explain the technical significance of the modifications.
+* Provide deeper insights into the changes. Consider architectural implications, potential risks, performance improvements, or adherence to coding best practices.
 
-The entire response must be in formal, professional Korean. Do not use any emojis.
+The entire response must be in formal, professional Korean. no emojis.
 
 ### Code Context (from the start of the week):
 {context_text}
