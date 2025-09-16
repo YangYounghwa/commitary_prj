@@ -10,6 +10,9 @@ from typing import List, Dict, Optional
 
 from datetime import datetime, timezone
 
+from flask import current_app
+import logging
+
 
 
 
@@ -144,24 +147,24 @@ class GithubService:
         Finds the repository by its ID before making the API call.
         """
         # Debug line
-        print(f"DEBUG: Starting getCommitMsgs with repo_id: {repo_id}")
+        current_app.logger.debug(f"DEBUG: Starting getCommitMsgs with repo_id: {repo_id}")
         repo_dto = self.getSingleRepoByID(token, repo_id)
         if not repo_dto:
-            print(f"Warning: Repository with ID {repo_id} not found.")
+            current_app.logger.debug(f"Warning: Repository with ID {repo_id} not found.")
             return CommitListDTO(commitList=[])
 
         owner = repo_dto.github_owner_login
         repo = repo_dto.github_name
         
         # Debug line
-        print(f"DEBUG: Found owner: {owner} and repo: {repo} for repo_id: {repo_id}")
+        current_app.logger.debug(f"DEBUG: Found owner: {owner} and repo: {repo} for repo_id: {repo_id}")
 
         # Use a try-except block to handle potential errors from datetime conversion
         try:
             start_dt = datetime.fromisoformat(startdatetime.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(enddatetime.replace('Z', '+00:00'))
         except ValueError as e:
-            print(f"ERROR: Invalid datetime format. {e}")
+            current_app.logger.debug(f"ERROR: Invalid datetime format. {e}")
             return CommitListDTO(commitList=[])
 
         # Using REST API to get commits because it returns the integer user ID
@@ -173,11 +176,11 @@ class GithubService:
         commits_endpoint = f"/repos/{owner}/{repo}/commits"
         
         # Debug line
-        print(f"DEBUG: Using REST API to get commits from {commits_endpoint}")
+        current_app.logger.debug(f"DEBUG: Using REST API to get commits from {commits_endpoint}")
         try:
             commits_data = self._make_request("GET", commits_endpoint, token, params=params)
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: REST API request failed: {e}")
+            current_app.logger.debug(f"ERROR: REST API request failed: {e}")
             return CommitListDTO(commitList=[])
 
         commit_list = []
@@ -189,7 +192,7 @@ class GithubService:
             
             # In some cases, the commit is not associated with a GitHub user account
             if author_id is None:
-                print(f"Warning: Commit {commit['sha']} has no valid GitHub user account ID.")
+                current_app.logger.debug(f"Warning: Commit {commit['sha']} has no valid GitHub user account ID.")
             
             # Determine the correct branch name for the commit
             commit_branch_name = branch
@@ -215,7 +218,7 @@ class GithubService:
             )
 
         # Debug line
-        print(f"DEBUG: Found {len(commit_list)} commits.")
+        current_app.logger.debug(f"DEBUG: Found {len(commit_list)} commits.")
         return CommitListDTO(commitList=commit_list)
         
 
@@ -226,7 +229,7 @@ class GithubService:
         """
         repo_dto = self.getSingleRepoByID(token, repo_id)
         if not repo_dto:
-            print(f"Warning: Repository with ID {repo_id} not found.")
+            current_app.logger.debug(f"Warning: Repository with ID {repo_id} not found.")
             return CommitListDTO(commitList=[])
 
         owner = repo_dto.github_owner_login
@@ -334,7 +337,7 @@ class GithubService:
             # or "Merge branch '<source_branch>' into '<target_branch>'".
             # We can use this pattern to filter.
             merge_commit_message_pattern = f"Merge pull request from {source_branch}"
-            print('merge_commit_message_pattern') 
+            current_app.logger.debug('merge_commit_message_pattern') 
             params = {
                 "sha": merged_into_branch,
                 "until": target_datetime.isoformat(),
@@ -352,7 +355,7 @@ class GithubService:
                 
                 if not commits_data:
                     # No more commits to fetch
-                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}'.")
+                    current_app.logger.debug(f"DEBUG: No more commits found on branch '{merged_into_branch}'.")
                     break
                 
                 for commit in commits_data:
@@ -363,7 +366,7 @@ class GithubService:
                         # Note: This is a fragile check. A more robust solution might use
                         # a dedicated API endpoint or more sophisticated parent analysis.
                         if source_branch in commit_message:
-                            print(f"DEBUG: Found merge commit '{commit['sha']}' for branch '{source_branch}'.")
+                            current_app.logger.debug(f"DEBUG: Found merge commit '{commit['sha']}' for branch '{source_branch}'.")
                             
                             # The second parent of the merge commit is the head of the merged branch.
                             # This is a common convention but can vary.
@@ -375,15 +378,15 @@ class GithubService:
                     break
                 page += 1
 
-            print(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
+            current_app.logger.debug(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
             return None
 
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
-            print(f"ERROR: Response body: {e.response.text}")
+            current_app.logger.debug(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            current_app.logger.debug(f"ERROR: Response body: {e.response.text}")
             return None
         except Exception as e:
-            print(f"ERROR: An unexpected error occurred: {e}")
+            current_app.logger.debug(f"ERROR: An unexpected error occurred: {e}")
             return None 
 
 
@@ -398,11 +401,11 @@ class GithubService:
         shaAfter = self._get_sha_by_datetime(token, owner, repo, branch, afterDatetime)
 
         if not shaBefore or not shaAfter:
-            print("Warning: Could not find commits for one or both of the given datetimes.")
+            current_app.logger.debug("Warning: Could not find commits for one or both of the given datetimes.")
             return None
 
         if shaBefore == shaAfter:
-            print("Warning: The commits at both times are the same. No difference.")
+            current_app.logger.debug("Warning: The commits at both times are the same. No difference.")
             return DiffDTO(
                 repo_name=repo,
                 repo_id=0,
@@ -522,7 +525,7 @@ class GithubService:
             )
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
-                print(f"Warning: Repository with ID {repo_id} not found.")
+                current_app.logger.debug(f"Warning: Repository with ID {repo_id} not found.")
                 return None
             raise
     
@@ -569,7 +572,7 @@ class GithubService:
         This function searches for a merge commit on the target branch.
         """
         # Debug line
-        print(f"DEBUG: Entering _get_sha_by_datetime_after_merge. Source branch: {source_branch}, Merged into: {merged_into_branch}, Until datetime: {target_datetime.isoformat()}")
+        current_app.logger.debug(f"DEBUG: Entering _get_sha_by_datetime_after_merge. Source branch: {source_branch}, Merged into: {merged_into_branch}, Until datetime: {target_datetime.isoformat()}")
         try:
             params = {
                 "sha": merged_into_branch,
@@ -583,45 +586,45 @@ class GithubService:
             while True:
                 params['page'] = page
                 # Debug line
-                print(f"DEBUG: Fetching page {page} of commits for branch '{merged_into_branch}' with until={target_datetime.isoformat()}")
+                current_app.logger.debug(f"DEBUG: Fetching page {page} of commits for branch '{merged_into_branch}' with until={target_datetime.isoformat()}")
                 commits_data = self._make_request("GET", commits_endpoint, token, params=params)
                 
                 if not commits_data:
-                    print(f"DEBUG: No more commits found on branch '{merged_into_branch}' within the specified time frame.")
+                    current_app.logger.debug(f"DEBUG: No more commits found on branch '{merged_into_branch}' within the specified time frame.")
                     break
                 
                 for commit in commits_data:
                     # Debug line
-                    print(f"DEBUG: Examining commit {commit['sha']} with {len(commit['parents'])} parents.")
+                    current_app.logger.debug(f"DEBUG: Examining commit {commit['sha']} with {len(commit['parents'])} parents.")
                     if len(commit['parents']) > 1:
                         # Debug line
-                        print(f"DEBUG: Found potential merge commit: {commit['sha']}")
+                        current_app.logger.debug(f"DEBUG: Found potential merge commit: {commit['sha']}")
                         # Check if the commit message contains the source branch name
                         commit_message = commit['commit']['message']
                         # A more robust check might involve comparing the second parent of the merge commit
                         # with the latest commit on the source branch.
                         if f"from {source_branch}" in commit_message or f"Merge branch '{source_branch}'" in commit_message:
-                            print(f"DEBUG: Confirmed merge commit '{commit['sha']}' for branch '{source_branch}' based on message.")
+                            current_app.logger.debug(f"DEBUG: Confirmed merge commit '{commit['sha']}' for branch '{source_branch}' based on message.")
                             if len(commit['parents']) > 1:
                                 return commit['parents'][1]['sha']
 
                 if len(commits_data) < 50:
                     # Debug line
-                    print(f"DEBUG: End of commits on this branch. Found {len(commits_data)} commits on page {page}.")
+                    current_app.logger.debug(f"DEBUG: End of commits on this branch. Found {len(commits_data)} commits on page {page}.")
                     break
                 page += 1
                 # Debug line
-                print(f"DEBUG: No merge commit found on page {page-1}. Moving to page {page}.")
+                current_app.logger.debug(f"DEBUG: No merge commit found on page {page-1}. Moving to page {page}.")
 
-            print(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
+            current_app.logger.debug(f"Warning: No merge commit found for branch '{source_branch}' merged into '{merged_into_branch}' before '{target_datetime.isoformat()}'.")
             return None
 
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
-            print(f"ERROR: Response body: {e.response.text}")
+            current_app.logger.debug(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            current_app.logger.debug(f"ERROR: Response body: {e.response.text}")
             return None
         except Exception as e:
-            print(f"ERROR: An unexpected error occurred: {e}")
+            current_app.logger.debug(f"ERROR: An unexpected error occurred: {e}")
             return None
 
 
@@ -638,7 +641,7 @@ class GithubService:
         date to find the initial commit.
         """
         # Debug line
-        print(f"DEBUG: Entering _get_first_commit_sha for branch '{branch}'.")
+        current_app.logger.debug(f"DEBUG: Entering _get_first_commit_sha for branch '{branch}'.")
         try:
             params = {
                 "sha": branch,
@@ -648,22 +651,22 @@ class GithubService:
             
             commits_endpoint = f"/repos/{owner}/{repo}/commits"
             # Debug line
-            print(f"DEBUG: API call to: {self.api_base_url}{commits_endpoint} with params: {params}")
+            current_app.logger.debug(f"DEBUG: API call to: {self.api_base_url}{commits_endpoint} with params: {params}")
             commits_data = self._make_request("GET", commits_endpoint, token, params=params)
 
             if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
                 # Debug line
-                print(f"DEBUG: Found first commit SHA: {commits_data[0]['sha']}")
+                current_app.logger.debug(f"DEBUG: Found first commit SHA: {commits_data[0]['sha']}")
                 return commits_data[0]['sha']
             
-            print(f"DEBUG: No commits found on branch '{branch}'.")
+            current_app.logger.debug(f"DEBUG: No commits found on branch '{branch}'.")
             return None
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
-            print(f"ERROR: Response body: {e.response.text}")
+            current_app.logger.debug(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            current_app.logger.debug(f"ERROR: Response body: {e.response.text}")
             return None
         except Exception as e:
-            print(f"ERROR: An unexpected error occurred: {e}")
+            current_app.logger.debug(f"ERROR: An unexpected error occurred: {e}")
             return None
 
     def _get_sha_by_datetime(self, token: str, owner: str, repo: str, branch: str, target_datetime: datetime) -> Optional[str]:
@@ -690,15 +693,15 @@ class GithubService:
                 return commits_data[0]['sha']
             
             # If the list is empty, it means no commit was found before the datetime.
-            print(f"DEBUG: No commit found on branch '{branch}' for datetime '{target_datetime.isoformat()}'.")
+            current_app.logger.debug(f"DEBUG: No commit found on branch '{branch}' for datetime '{target_datetime.isoformat()}'.")
             return None
 
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
-            print(f"ERROR: Response body: {e.response.text}")
+            current_app.logger.debug(f"ERROR: GitHub API request failed with status code {e.response.status_code}")
+            current_app.logger.debug(f"ERROR: Response body: {e.response.text}")
             return None
         except Exception as e:
-            print(f"ERROR: An unexpected error occurred: {e}")
+            current_app.logger.debug(f"ERROR: An unexpected error occurred: {e}")
             return None
         
 
@@ -721,7 +724,7 @@ class GithubService:
             
             return None
         except Exception as e:
-            print(f"Error getting first commit after datetime: {e}")
+            current_app.logger.debug(f"Error getting first commit after datetime: {e}")
             return None   
 
     def getDiffByIdTime2(self, user_token: str, repo_id: int, branch_from: str, branch_to: str, 
@@ -731,39 +734,39 @@ class GithubService:
         Returns the difference between two points in time on two (potentially different) branches.
         Corrects the SHA finding logic.
         """
-        print("DEBUG: Starting getDiffByIdTime2 function.")
+        current_app.logger.debug("DEBUG: Starting getDiffByIdTime2 function.")
         repo_dto = self.getSingleRepoByID(user_token, repo_id)
         if not repo_dto:
-            print("Error: Repository not found.")
+            current_app.logger.debug("Error: Repository not found.")
             return None
 
         owner = repo_dto.github_owner_login
         repo_name = repo_dto.github_name
-        print(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
+        current_app.logger.debug(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
 
         # Correct logic for finding the SHA before the start date
         shaBefore = self._get_sha_by_datetime(user_token, owner, repo_name, branch_from, datetime_from)
         if not shaBefore:
-            print(f"DEBUG: No commit found on branch '{branch_from}' before '{datetime_from}'.")
+            current_app.logger.debug(f"DEBUG: No commit found on branch '{branch_from}' before '{datetime_from}'.")
             return None
         
         # Correct logic for finding the SHA after the end date.
         # We want the first commit *after* the `datetime_from`
         shaAfter = self._get_first_commit_sha_after_datetime(user_token, owner, repo_name, branch_to, datetime_from)
         if not shaAfter:
-            print(f"DEBUG: No direct commit found on branch '{branch_to}' after '{datetime_from}'. Attempting to find merge commit from '{default_merged_branch}'.")
+            current_app.logger.debug(f"DEBUG: No direct commit found on branch '{branch_to}' after '{datetime_from}'. Attempting to find merge commit from '{default_merged_branch}'.")
             shaAfter = self._get_sha_by_datetime_after_merge(
                 user_token, owner, repo_name, default_merged_branch, branch_to, datetime_to
             )
 
         if not shaBefore or not shaAfter:
-            print("Warning: Could not find commits for one or both of the given datetimes, even with fallback.")
+            current_app.logger.debug("Warning: Could not find commits for one or both of the given datetimes, even with fallback.")
             return None
 
-        print(f"DEBUG: Found SHA_before: {shaBefore}")
-        print(f"DEBUG: Found SHA_after: {shaAfter}")
+        current_app.logger.debug(f"DEBUG: Found SHA_before: {shaBefore}")
+        current_app.logger.debug(f"DEBUG: Found SHA_after: {shaAfter}")
         if shaBefore == shaAfter:
-            print("Warning: The commits at both times are the same. No difference.")
+            current_app.logger.debug("Warning: The commits at both times are the same. No difference.")
             return DiffDTO(
                 repo_name=repo_name,
                 repo_id=repo_id,
@@ -781,7 +784,7 @@ class GithubService:
             diff_dto.repo_id = repo_id
             diff_dto.branch_before = branch_from
             diff_dto.branch_after = branch_to
-            print("DEBUG: Successfully generated DiffDTO.")
+            current_app.logger.debug("DEBUG: Successfully generated DiffDTO.")
         
         return diff_dto
     
@@ -809,15 +812,15 @@ class GithubService:
         to the last commit in the time range, ensuring that only changes within that
         period on that specific branch are included.
         """
-        print(f"{datetime.now()} DEBUG: Starting getDiffByIdTime3 function.")
+        current_app.logger.debug(f"{datetime.now()} DEBUG: Starting getDiffByIdTime3 function.")
         repo_dto = self.getSingleRepoByID(user_token, repo_id)
         if not repo_dto:
-            print("Error: Repository not found.")
+            current_app.logger.debug("Error: Repository not found.")
             return None
 
         owner = repo_dto.github_owner_login
         repo_name = repo_dto.github_name
-        print(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
+        current_app.logger.debug(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
 
         # Use getCommitMsgs2 to get an accurate commit history for the branch in the time range
         commits_in_range_dto = self.getCommitMsgs2(
@@ -830,7 +833,7 @@ class GithubService:
 
         # If no commits are found, it means there was no activity in the given range.
         if not commits_in_range_dto or not commits_in_range_dto.commitList:
-            print("DEBUG: No commits found in the specified time range on this branch.")
+            current_app.logger.debug("DEBUG: No commits found in the specified time range on this branch.")
             return DiffDTO(
                 repo_name=repo_name,
                 repo_id=repo_id,
@@ -852,7 +855,7 @@ class GithubService:
             commit_details = self._make_request("GET", f"/repos/{owner}/{repo_name}/commits/{oldest_commit_in_range_sha}", user_token)
             
             if not commit_details.get('parents'):
-                print(f"Warning: The oldest commit in range {oldest_commit_in_range_sha} has no parents (it might be the first commit).")
+                current_app.logger.debug(f"Warning: The oldest commit in range {oldest_commit_in_range_sha} has no parents (it might be the first commit).")
                 # In this case, we'll compare from the commit itself, which might not show all changes if it's not the absolute first commit.
                 # A better approach could be to use the empty tree SHA, but for simplicity, we'll diff against itself which results in an empty diff.
                 # Or diff against its own sha~1 if possible. Let's get the parent.
@@ -866,15 +869,15 @@ class GithubService:
             shaBefore = commit_details['parents'][0]['sha']
 
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: Failed to fetch commit details to find parent SHA: {e}")
+            current_app.logger.debug(f"ERROR: Failed to fetch commit details to find parent SHA: {e}")
             return None
 
 
-        print(f"DEBUG: Found SHA_before (parent of first commit in range): {shaBefore}")
-        print(f"DEBUG: Found SHA_after (last commit in range): {shaAfter}")
+        current_app.logger.debug(f"DEBUG: Found SHA_before (parent of first commit in range): {shaBefore}")
+        current_app.logger.debug(f"DEBUG: Found SHA_after (last commit in range): {shaAfter}")
 
         if shaBefore == shaAfter:
-            print("Warning: The start and end commits for the diff are the same.")
+            current_app.logger.debug("Warning: The start and end commits for the diff are the same.")
             return DiffDTO(
                 repo_name=repo_name,
                 repo_id=repo_id,
@@ -892,7 +895,7 @@ class GithubService:
             diff_dto.repo_id = repo_id
             diff_dto.branch_before = branch
             diff_dto.branch_after = branch
-            print("DEBUG: Successfully generated DiffDTO.")
+            current_app.logger.debug("DEBUG: Successfully generated DiffDTO.")
         
         return diff_dto    
     

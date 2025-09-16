@@ -11,7 +11,8 @@ from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, Commit
 from datetime import date, datetime, timedelta, timezone
 
 
-
+from flask import current_app
+import logging
 
 
 from commitary_backend.commitaryUtils.dbConnectionDecorator import with_db_connection
@@ -100,7 +101,7 @@ class InsightService():
         
         if documents:
             self.vector_store.add_documents(documents)
-            print(f"DEBUG: Successfully embedded and stored {len(documents)} document chunks.")
+            current_app.logger.debug(f"DEBUG: Successfully embedded and stored {len(documents)} document chunks.")
     
     
     
@@ -110,10 +111,13 @@ class InsightService():
         Creates a daily insight for a specific branch using a RAG system. It fetches a snapshot from the previous Monday,
         embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
         """
-        print(f"{datetime.now()} debug code")
+        current_app.logger.debug(f"{datetime.now()} debug code")
+
         try:
             insight_date = start_datetime.date()
-            print(f"DEBUG: Processing insight for date: {insight_date}, repo_id: {repo_id}, branch: {branch}")
+            
+            
+            current_app.logger.debug(f"DEBUG: Processing insight for date: {insight_date}, repo_id: {repo_id}, branch: {branch}")
             
             # Step 0: Check if an insight for this specific branch and date already exists.
             with conn.cursor() as cur:
@@ -126,7 +130,7 @@ class InsightService():
                     AND ii.branch_name = %s
                 """, (commitary_id, repo_id, insight_date, branch))
                 if cur.fetchone():
-                    print("DEBUG: Insight for this branch and date already exists.")
+                    current_app.logger.debug("DEBUG: Insight for this branch and date already exists.")
                     return 1 # Status: Already exists
 
             # Step 1: Get the most recent Monday
@@ -150,22 +154,22 @@ class InsightService():
                 )
                 if cur.fetchone():
                     snapshot_exists = True
-                    print(f"DEBUG: Codebase snapshot for {monday_date} already exists in the vector store.")
+                    current_app.logger.debug(f"DEBUG: Codebase snapshot for {monday_date} already exists in the vector store.")
 
             repo_dto: RepoDTO = gb_service.getSingleRepoByID(user_token, repo_id)
             if not repo_dto:
-                print("ERROR: Repository not found on GitHub.")
+                current_app.logger.debug("ERROR: Repository not found on GitHub.")
                 return 2
             
             if not snapshot_exists:
                 # Step 2: Get Monday's codebase snapshot and embed it
-                print(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
+                current_app.logger.debug(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
                 monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
                 
                 if monday_snapshot and monday_snapshot.files:
                     self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
                 else:
-                    print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
+                    current_app.logger.debug("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
 
 
             # Step 3: Get the diff from the start of the week to the target date
@@ -178,7 +182,7 @@ class InsightService():
 
             # Step 4: Handle no diff
             if not diff_dto or not diff_dto.files:
-                print("DEBUG: No activity found for the specified date.")
+                current_app.logger.debug("DEBUG: No activity found for the specified date.")
                 activity_status = False
                 
                 with conn.cursor() as cur:
@@ -201,7 +205,7 @@ class InsightService():
             diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
             retriever = self.vector_store.as_retriever(search_kwargs={'k': 2})
             retrieved_docs = retriever.invoke(diff_content_for_retrieval)
-            print(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
+            current_app.logger.debug(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
 
             # Step 6: Generate insight with RAG context
             insight_item: InsightItemDTO = rag_service.generate_insight_from_diff(
@@ -238,12 +242,12 @@ class InsightService():
 
                 conn.commit()
             
-            print("DEBUG: Insight successfully created and saved.")
+            current_app.logger.debug("DEBUG: Insight successfully created and saved.")
             return 0 # Status: Success
 
         except Exception as e:
             conn.rollback()
-            print(f"ERROR: An exception occurred while creating insight: {e}")
+            current_app.logger.debug(f"ERROR: An exception occurred while creating insight: {e}")
             return 2 # Status: Error
         
     @with_db_connection
@@ -305,7 +309,7 @@ class InsightService():
             return DailyInsightListDTO(insights=list(daily_insights_map.values()))
 
         except Exception as e:
-            print(f"ERROR: An exception occurred while retrieving insights: {e}")
+            current_app.logger.debug(f"ERROR: An exception occurred while retrieving insights: {e}")
             return DailyInsightListDTO(insights=[])
 
 # Singleton instance
