@@ -232,17 +232,19 @@ class InsightService():
                 {"repo_id": repo_id}
             ]
         }})
-            # retrieved_docs = retriever.invoke(diff_content_for_retrieval)
-            
-            
             
             try:
                 current_app.logger.debug("Attempting to retrieve documents from vector store...")
                 current_app.logger.debug(f"  - Size of content for retrieval: {len(diff_content_for_retrieval)} characters")
                 
-                retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+                # ADD THIS with BLOCK and the log line
+                with get_openai_callback() as cb:
+                    retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+                    current_app.logger.debug(f"OpenAI Token Usage for Retrieval Query Embedding: {cb}")
+
 
                 current_app.logger.debug(f"Successfully retrieved {len(retrieved_docs)} documents from vector store.")
+
             except Exception as e:
                 current_app.logger.error("CRITICAL: Failed during vector store retrieval (retriever.invoke). This is the point of failure.", exc_info=True)
                 # Re-raise the exception or return an error status
