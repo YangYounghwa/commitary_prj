@@ -296,7 +296,7 @@ if __name__ == "__main__":
         # test_get_user()
         # test_get_repos()
         # test_get_branches()
-        test_get_diff()
+        # test_get_diff()
         # test_get_commits()
         # test_get_commits2()
         # test_get_diff_invalid_datetime()
