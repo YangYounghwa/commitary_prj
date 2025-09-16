@@ -26,14 +26,30 @@ class RAGService:
             )
 
         # Combine all file patches into a single string
+        
+        
+        
+        MAX_PATCH_LENGTH_PER_FILE = 1500  # Adjust this value as needed
+
         diff_text = ""
         for file in diff_dto.files:
-            diff_text += f"Filename: {file.filename}\nStatus: {file.status}\nPatch:\n{file.patch}\n\n"
+            patch_content = file.patch if file.patch else ""
+            
+            # Check if the patch content exceeds the per-file limit
+            if len(patch_content) > MAX_PATCH_LENGTH_PER_FILE:
+                patch_content = patch_content[:MAX_PATCH_LENGTH_PER_FILE] + "\n... (patch truncated)"
+
+            diff_text += f"Filename: {file.filename}\nStatus: {file.status}\nPatch:\n{patch_content}\n\n"
+                
+
+            
+            
+            
         MAX_DIFF_LENGTH = 4000
         
         
         if len(diff_text) > MAX_DIFF_LENGTH:
-            diff_text = diff_text[:MAX_DIFF_LENGTH] + "\n\n... (diff truncated due to length)"
+            diff_text = diff_text[:MAX_DIFF_LENGTH] + "\n\n... (diff truncated)"
         # Format the retrieved documents for the prompt
         context_text = ""
         
