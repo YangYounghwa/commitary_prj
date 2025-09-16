@@ -1,11 +1,13 @@
 import os
 from typing import List
+from flask import current_app
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from commitary_backend.dto.gitServiceDTO import DiffDTO
 from commitary_backend.dto.insightDTO import InsightItemDTO
 from dotenv import load_dotenv
+import logging
 
 
 load_dotenv() # Loads env from .env
@@ -58,7 +60,11 @@ class RAGService:
             context_text += f"--- Context from {doc.metadata.get('filepath', 'unknown file')} ---\n"
             context_text += doc.page_content
             context_text += "\n\n"
-
+            
+        current_app.logger.debug(f"Final prompt component lengths before sending to OpenAI:")
+        current_app.logger.debug(f"  - Context Text Length: {len(context_text)} characters")
+        current_app.logger.debug(f"  - Diff Text Length:    {len(diff_text)} characters")
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert software developer. Analyze the following code changes (diff) and provide a concise, high-level summary of the key insights. Use the provided context from the codebase to better understand the purpose and impact of the changes. Cite classes and filenames if needed. Make list of changes divided with '-' And provide the summary on top. Focus on what was changed and why, not just the lines of code. Return the concise result in Korean"),
             # Corrected: Use placeholders in the template
