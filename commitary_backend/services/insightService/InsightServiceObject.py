@@ -28,21 +28,7 @@ from langchain_core.documents import Document
 
 
 
-# SQL schema.
 '''
-CREATE TYPE enum_type AS ENUM ('codebase', 'patch', 'externaldoc');
-CREATE TABLE IF NOT EXISTS vector_data (
-    id TEXT PRIMARY KEY,
-    embedding VECTOR(1536) NOT NULL,
-    metadata_commitary_user BIGINT,
-    metadata_repo_name TEXT,
-    metadata_repo_id BIGINT,
-    metadata_target_branch TEXT,
-    metadata_filepath TEXT,
-    metadata_type enum_type,
-    metadata_lastModifiedTime TIMESTAMPTZ
-);
-
 CREATE TABLE IF NOT EXISTS "daily_insight" (
     daily_insight_id SERIAL PRIMARY KEY,
     date DATE,
