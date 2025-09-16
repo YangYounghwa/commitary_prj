@@ -76,7 +76,7 @@ class InsightService():
     embeddings=self.embeddings,
     collection_name="codebase_snapshots"
 )
-    def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int):
+    def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int,snapshot_week_id:str):
         """
         Chunks, embeds, and stores the codebase snapshot in the vector database.
         """
@@ -95,6 +95,7 @@ class InsightService():
                         "filepath": file.path,
                         "type": "codebase",
                         "lastModifiedTime": file.last_modified_at.isoformat(),
+                        "snapshot_week_id": snapshot_week_id,
                         "chunk_id": f"{repo_id}_{branch}_{file.path}_{i}"
                     }
                 )
@@ -147,39 +148,42 @@ class InsightService():
             today = insight_date
             monday_date = today - timedelta(days=today.weekday())
             monday_start_datetime = datetime.combine(monday_date, datetime.min.time(), tzinfo=timezone.utc)
+            snapshot_week_id_str = monday_date.isoformat()  # e.g., "2025-09-15"
 
-            # Step 1.5: Check if the snapshot for this Monday already exists in the vector DB
+            # Step 1.5: Check if the snapshot for this Monday already exists using the new ID
             snapshot_exists = False
             with conn.cursor() as cur:
+                # THIS IS THE CORRECTED QUERY for your schema
                 cur.execute(
                     """
-                    SELECT 1 FROM vector_data 
-                    WHERE metadata_repo_id = %s 
-                    AND metadata_target_branch = %s 
-                    AND metadata_lastModifiedTime = %s 
-                    AND metadata_type = 'codebase'
+                    SELECT 1 FROM langchain_pg_embedding
+                    WHERE cmetadata->>'repo_id' = %s
+                    AND cmetadata->>'target_branch' = %s
+                    AND cmetadata->>'snapshot_week_id' = %s
+                    AND cmetadata->>'type' = 'codebase'
                     LIMIT 1
                     """,
-                    (repo_id, branch, monday_start_datetime)
+                    (str(repo_id), branch, snapshot_week_id_str) # Cast repo_id to string for JSONB query
                 )
                 if cur.fetchone():
                     snapshot_exists = True
-                    current_app.logger.debug(f"DEBUG: Codebase snapshot for {monday_date} already exists in the vector store.")
+                    print(f"DEBUG: Codebase snapshot for week of {snapshot_week_id_str} already exists.")
 
             repo_dto: RepoDTO = gb_service.getSingleRepoByID(user_token, repo_id)
             if not repo_dto:
-                current_app.logger.debug("ERROR: Repository not found on GitHub.")
+                print("ERROR: Repository not found on GitHub.")
                 return 2
-            
+
             if not snapshot_exists:
-                # Step 2: Get Monday's codebase snapshot and embed it
-                current_app.logger.debug(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
+                print(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
                 monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
-                
+
                 if monday_snapshot and monday_snapshot.files:
-                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
+                    # Pass the new stable ID when storing the snapshot
+                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id, snapshot_week_id_str)
                 else:
-                    current_app.logger.debug("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
+                    print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
+
 
 
             # Step 3: Get the diff from the start of the week to the target date
