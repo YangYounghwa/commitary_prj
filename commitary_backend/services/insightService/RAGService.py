@@ -48,7 +48,7 @@ class RAGService:
             
             
             
-        MAX_DIFF_LENGTH = 4000
+        MAX_DIFF_LENGTH = 7000
         
         
         if len(diff_text) > MAX_DIFF_LENGTH:
