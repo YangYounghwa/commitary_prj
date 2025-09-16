@@ -212,7 +212,13 @@ class InsightService():
             activity_status = True
             retrieved_docs = None
             # Step 5: Retrieve relevant documents from the vector store
-            diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
+            
+            diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])            
+            MAX_RETRIEVAL_QUERY_LENGTH = 100000  # Set a safe character limit for the query
+            if len(diff_content_for_retrieval) > MAX_RETRIEVAL_QUERY_LENGTH:
+                diff_content_for_retrieval = diff_content_for_retrieval[:MAX_RETRIEVAL_QUERY_LENGTH]
+ 
+
             retriever = self.vector_store.as_retriever(search_kwargs={'k': 2})
             # retrieved_docs = retriever.invoke(diff_content_for_retrieval)
             
