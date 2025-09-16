@@ -121,19 +121,26 @@ class InsightService():
     @with_db_connection
     def createDailyInsight(self,  commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str,conn=None) -> int:
         """
-        Creates a daily insight using a RAG system. It fetches a snapshot from the previous Monday,
+        Creates a daily insight for a specific branch using a RAG system. It fetches a snapshot from the previous Monday,
         embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
         """
         try:
             insight_date = start_datetime.date()
-            print(f"DEBUG: Processing insight for date: {insight_date} for repo_id: {repo_id}")
-            
-            # Step 0: Check if insight already exists
+            print(f"DEBUG: Processing insight for date: {insight_date}, repo_id: {repo_id}, branch: {branch}")
+
+            # Step 0: Check if an insight for this specific branch and date already exists.
             with conn.cursor() as cur:
-                cur.execute("SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s", (commitary_id, repo_id, insight_date))
+                cur.execute("""
+                    SELECT 1 FROM insight_item ii
+                    JOIN daily_insight di ON ii.daily_insight_id = di.daily_insight_id
+                    WHERE di.commitary_id = %s
+                    AND di.repo_id = %s
+                    AND di.date = %s
+                    AND ii.branch_name = %s
+                """, (commitary_id, repo_id, insight_date, branch))
                 if cur.fetchone():
-                    print("DEBUG: Insight already exists for this date.")
-                    return 1
+                    print("DEBUG: Insight for this branch and date already exists.")
+                    return 1 # Status: Already exists
 
             # Step 1: Get the most recent Monday
             today = insight_date
@@ -147,9 +154,9 @@ class InsightService():
                     """
                     SELECT 1 FROM vector_data 
                     WHERE metadata_repo_id = %s 
-                      AND metadata_target_branch = %s 
-                      AND metadata_lastModifiedTime = %s 
-                      AND metadata_type = 'codebase'
+                    AND metadata_target_branch = %s 
+                    AND metadata_lastModifiedTime = %s 
+                    AND metadata_type = 'codebase'
                     LIMIT 1
                     """,
                     (repo_id, branch, monday_start_datetime)
@@ -169,7 +176,6 @@ class InsightService():
                 monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
                 
                 if monday_snapshot and monday_snapshot.files:
-                    # Corrected line: removed the extra argument
                     self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
                 else:
                     print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
@@ -189,10 +195,16 @@ class InsightService():
                 activity_status = False
                 
                 with conn.cursor() as cur:
+                    # Find or create daily_insight and set its activity to false if it doesn't exist
                     cur.execute(
-                        "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
-                        (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                        "SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s",
+                        (commitary_id, repo_id, insight_date)
                     )
+                    if not cur.fetchone():
+                        cur.execute(
+                            "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s)",
+                            (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                        )
                     conn.commit()
                 return -1 # Status: No activity
             
@@ -210,12 +222,26 @@ class InsightService():
             )
             # Step 7: Save the insight into the database
             with conn.cursor() as cur:
-                # Insert into daily_insight table
+                # Find or create the daily_insight entry for the day
                 cur.execute(
-                    "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
-                    (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                    "SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s",
+                    (commitary_id, repo_id, insight_date)
                 )
-                daily_insight_id = cur.fetchone()[0]
+                result = cur.fetchone()
+                if result:
+                    daily_insight_id = result[0]
+                    # If activity is true, make sure to update the daily_insight record
+                    cur.execute(
+                        "UPDATE daily_insight SET activity = TRUE WHERE daily_insight_id = %s",
+                        (daily_insight_id,)
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
+                        (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                    )
+                    daily_insight_id = cur.fetchone()[0]
+
 
                 # Insert into insight_item table
                 cur.execute(
@@ -232,7 +258,7 @@ class InsightService():
             conn.rollback()
             print(f"ERROR: An exception occurred while creating insight: {e}")
             return 2 # Status: Error
-    
+        
     @with_db_connection
     def getInsights(self,commitary_id: int, repo_id: int, start_datetime: datetime, end_datetime: datetime,conn=None) -> DailyInsightListDTO:
         """
