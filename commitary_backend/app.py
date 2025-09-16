@@ -16,6 +16,9 @@ from commitary_backend.services.insightService.InsightServiceObject import insig
 import traceback
 import psycopg2
 
+import logging
+from flask import current_app
+
 
 from flask_cors import CORS
 
@@ -23,7 +26,7 @@ from flask_cors import CORS
 # Load environment variables from .env file
 load_dotenv()
 
-
+import logging
 
 # Using postgre 16.10
 
@@ -42,13 +45,14 @@ load_dotenv()
 #         conn = psycopg2.connect(os.getenv("DATABASE_URL"))
 #         return conn
 #     except psycopg2.OperationalError as e:
-#         print(f"Database connection failed: {e}")
+#         app.logger.debug(f"Database connection failed: {e}")
 #         return None
 
 from commitary_backend.database import create_db_pool
-from .commitaryUtils.dbConnectionDecorator import with_db_connection
+from commitary_backend.commitaryUtils.dbConnectionDecorator import close_db_conn
+from commitary_backend.commitaryUtils.dbConnectionDecorator import with_db_connection
 
-
+import logging
 
 def create_app():
     """
@@ -57,8 +61,11 @@ def create_app():
     """
     
     app = Flask(__name__)
+    app.logger.setLevel(logging.DEBUG)
     create_db_pool(app)
+    app.teardown_appcontext(close_db_conn)
     CORS(app)
+    app.logger.debug(f"{datetime.now()} app started.")
 
     # --- Configuration and Sanity Check ---
     app.secret_key = os.getenv("FLASK_SECRET_KEY")
@@ -87,7 +94,7 @@ def create_app():
         userinfo = None
 
         # DEBUG CODE : DELETE THIS AFTER DEBUGGING.
-        # print(f"DEBUG: Token received: {user_token}")
+        # app.logger.debug(f"DEBUG: Token received: {user_token}")
  
 
         # Step 1: Get user metadata from GitHub
@@ -151,8 +158,8 @@ def create_app():
         repos_dict = repos_dto.model_dump() 
 
         if app.config.get("TESTING"): # type: ignore
-            print("Repos dict : ")
-            print(repos_dict)
+            app.logger.debug("Repos dict : ")
+            app.logger.debug(repos_dict)
         return jsonify(repos_dict)
 
 
@@ -171,7 +178,20 @@ def create_app():
         commits_dto:CommitListDTO =  gb_service.getCommitMsgs(repo_id=repo_id,token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime)
         commits_dict:dict = commits_dto.model_dump()
         return jsonify(commits_dict)
+    @app.route("/githubCommits2")
+    def getCommits2():
 
+        user_token = request.args.get('token')
+  
+        startdatetime = request.args.get('datetime_from')
+        enddatetime = request.args.get('datetime_to')
+        branch = request.args.get('branch_name')
+        repo_id = request.args.get('repo_id')
+
+
+        commits_dto:CommitListDTO =  gb_service.getCommitMsgs2(repo_id=repo_id,token=user_token,branch=branch,startdatetime=startdatetime,enddatetime=enddatetime)
+        commits_dict:dict = commits_dto.model_dump()
+        return jsonify(commits_dict)
 
     @app.route("/registerRepo",methods=['POST'])
     @with_db_connection
@@ -315,7 +335,7 @@ def create_app():
             return jsonify(RepoListDTO(repoList=repos_list).model_dump())
         
         except Exception as e:
-            print(e)
+            app.logger.debug(e)
             return jsonify({"error": f"Failed to retrieve registered repositories: {e}"}), 500
   
     # has been tested. 
@@ -348,7 +368,7 @@ def create_app():
 
         # Basic input validation and type conversion
         if not all([repo_id, user_token, branch_from, branch_to, datetime_from_str, datetime_to_str]):
-            print("Missing one or more required parameters.")
+            app.logger.debug("Missing one or more required parameters.")
             return "Missing one or more required parameters.", 400
 
         try:
@@ -364,13 +384,28 @@ def create_app():
             datetime_from = datetime.fromisoformat(datetime_from_str)
             datetime_to = datetime.fromisoformat(datetime_to_str)
         except (ValueError, TypeError) as e:
-            print(f"Invalid parameter type or format. Error: {e}")
+            app.logger.debug(f"Invalid parameter type or format. Error: {e}")
             return "Invalid parameter type or format. Datetime must be in ISO format and repo_id must be an integer.", 400
 
         
         
         # Call the core logic function with all the arguments, including the default_branch
-        diff_dto:DiffDTO = gb_service.getDiffByIdTime2(
+        diff_dto:DiffDTO = None
+        if branch_to==branch_from:
+            diff_dto:DiffDTO = gb_service.getDiffByIdTime3(
+            user_token=user_token,
+            repo_id=repo_id,
+            branch=branch_to,
+            datetime_from=datetime_from,
+            datetime_to=datetime_to,
+            # default_merged_branch=default_branch
+        )
+            
+            
+            
+        
+        else:
+            diff_dto:DiffDTO = gb_service.getDiffByIdTime2(
             user_token=user_token,
             repo_id=repo_id,
             branch_from=branch_from,
@@ -387,7 +422,7 @@ def create_app():
             diff_dict = diff_dto.model_dump()
 
             # Debug Line
-            # print(diff_dto.model_dump_json())
+            # app.logger.debug(diff_dto.model_dump_json())
             return jsonify(diff_dict)
 
         else:
@@ -402,12 +437,13 @@ def create_app():
 
     @app.route("/createInsight",methods=['POST'])
     def createInsight():
+        
         user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         start_date_str = request.args.get('date_from')
         branch = request.args.get('branch')
-
+        app.logger.debug(f"{datetime.now()} /createInsight for {repo_id}, {branch} in {start_date_str}")
         if not all([user_token, repo_id, commitary_id, start_date_str, branch]):
             return jsonify({"error": "Missing one or more required parameters."}), 400
 

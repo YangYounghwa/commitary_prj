@@ -1,11 +1,13 @@
 import os
 from typing import List
+from flask import current_app
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from commitary_backend.dto.gitServiceDTO import DiffDTO
 from commitary_backend.dto.insightDTO import InsightItemDTO
 from dotenv import load_dotenv
+import logging
 
 
 load_dotenv() # Loads env from .env
@@ -19,6 +21,7 @@ class RAGService:
         """
         Generates a concise code insight from a DiffDTO, using retrieved documents as context.
         """
+        current_app.logger.debug(f"Generating insight form diff")
         if not diff_dto.files:
             return InsightItemDTO(
                 branch_name=branch_name,
@@ -26,21 +29,47 @@ class RAGService:
             )
 
         # Combine all file patches into a single string
+        
+        
+        
+        MAX_PATCH_LENGTH_PER_FILE = 1500  # Adjust this value as needed
+
         diff_text = ""
         for file in diff_dto.files:
-            diff_text += f"Filename: {file.filename}\nStatus: {file.status}\nPatch:\n{file.patch}\n\n"
+            patch_content = file.patch if file.patch else ""
+            
+            # Check if the patch content exceeds the per-file limit
+            if len(patch_content) > MAX_PATCH_LENGTH_PER_FILE:
+                patch_content = patch_content[:MAX_PATCH_LENGTH_PER_FILE] + "\n... (patch truncated)"
 
+            diff_text += f"Filename: {file.filename}\nStatus: {file.status}\nPatch:\n{patch_content}\n\n"
+                
+
+            
+            
+            
+        MAX_DIFF_LENGTH = 7000
+        
+        
+        if len(diff_text) > MAX_DIFF_LENGTH:
+            diff_text = diff_text[:MAX_DIFF_LENGTH] + "\n\n... (diff truncated)"
         # Format the retrieved documents for the prompt
         context_text = ""
+        
+        
         for doc in retrieved_docs:
             context_text += f"--- Context from {doc.metadata.get('filepath', 'unknown file')} ---\n"
             context_text += doc.page_content
             context_text += "\n\n"
-
+            
+        current_app.logger.debug(f"Final prompt component lengths before sending to OpenAI:")
+        current_app.logger.debug(f"  - Context Text Length: {len(context_text)} characters")
+        current_app.logger.debug(f"  - Diff Text Length:    {len(diff_text)} characters")
+        
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert software developer. Analyze the following code changes (diff) and provide a concise, high-level summary of the key insights. Use the provided context from the codebase to better understand the purpose and impact of the changes. Focus on what was changed and why, not just the lines of code. Return the concise result in Korean"),
+            ("system", "You are an expert software developer. Analyze the following code changes (diff) and provide a concise, high-level summary of the key insights. Use the provided context from the codebase to better understand the purpose and impact of the changes. Cite classes and filenames if needed. Make list of changes divided with '-' And provide the summary on top. Focus on what was changed and why, not just the lines of code. Return the concise result in Korean"),
             # Corrected: Use placeholders in the template
-            ("user", "Repository: {repo_name}\nBranch: {branch_name}\n\n### Code Context (from the start of the week):\n{context_text}\n\n### Code Changes (this week's diff):\n{diff_text}")
+            ("user", "Repository: {repo_name}\nBranch: {branch_name}\n\n### Code Context (from the start of the week):\n{context_text}\n\n### Code Changes (today's diff):\n{diff_text}")
         ])
 
         chain = prompt | self.llm

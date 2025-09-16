@@ -11,7 +11,8 @@ from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, Commit
 from datetime import date, datetime, timedelta, timezone
 
 
-
+from flask import current_app
+import logging
 
 
 from commitary_backend.commitaryUtils.dbConnectionDecorator import with_db_connection
@@ -28,21 +29,7 @@ from langchain_core.documents import Document
 
 
 
-# SQL schema.
 '''
-CREATE TYPE enum_type AS ENUM ('codebase', 'patch', 'externaldoc');
-CREATE TABLE IF NOT EXISTS vector_data (
-    id TEXT PRIMARY KEY,
-    embedding VECTOR(1536) NOT NULL,
-    metadata_commitary_user BIGINT,
-    metadata_repo_name TEXT,
-    metadata_repo_id BIGINT,
-    metadata_target_branch TEXT,
-    metadata_filepath TEXT,
-    metadata_type enum_type,
-    metadata_lastModifiedTime TIMESTAMPTZ
-);
-
 CREATE TABLE IF NOT EXISTS "daily_insight" (
     daily_insight_id SERIAL PRIMARY KEY,
     date DATE,
@@ -89,10 +76,11 @@ class InsightService():
     embeddings=self.embeddings,
     collection_name="codebase_snapshots"
 )
-    def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int):
+    def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int,snapshot_week_id:str):
         """
         Chunks, embeds, and stores the codebase snapshot in the vector database.
         """
+        current_app.logger.debug(f"embed_and_store_codebase")
         documents = []
         for file in codebase_dto.files:
             chunks = self.text_splitter.split_text(file.code_content)
@@ -107,102 +95,158 @@ class InsightService():
                         "filepath": file.path,
                         "type": "codebase",
                         "lastModifiedTime": file.last_modified_at.isoformat(),
+                        "snapshot_week_id": snapshot_week_id,
                         "chunk_id": f"{repo_id}_{branch}_{file.path}_{i}"
                     }
                 )
                 documents.append(doc)
         
         if documents:
-            self.vector_store.add_documents(documents)
-            print(f"DEBUG: Successfully embedded and stored {len(documents)} document chunks.")
-    
-    
+            current_app.logger.debug(f"Attempting to embed and store {len(documents)} document chunks for codebase snapshot.")
+            
+            # Process documents in batches to avoid timeouts and memory issues.
+            batch_size = 16
+            for i in range(0, len(documents), batch_size):
+                batch = documents[i:i + batch_size]
+                self.vector_store.add_documents(batch)
+                current_app.logger.debug(f"  - Successfully processed batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+
+            current_app.logger.debug(f"Successfully embedded and stored all document chunks.")
+        else:
+            current_app.logger.debug("No documents to embed for this codebase snapshot.")
+            
     
     @with_db_connection
     def createDailyInsight(self,  commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str,conn=None) -> int:
         """
-        Creates a daily insight using a RAG system. It fetches a snapshot from the previous Monday,
+        Creates a daily insight for a specific branch using a RAG system. It fetches a snapshot from the previous Monday,
         embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
         """
+        current_app.logger.debug(f"{datetime.now()} debug code")
+
         try:
             insight_date = start_datetime.date()
-            print(f"DEBUG: Processing insight for date: {insight_date} for repo_id: {repo_id}")
             
-            # Step 0: Check if insight already exists
+            
+            current_app.logger.debug(f"DEBUG: Processing insight for date: {insight_date}, repo_id: {repo_id}, branch: {branch}")
+            
+            # Step 0: Check if an insight for this specific branch and date already exists.
             with conn.cursor() as cur:
-                cur.execute("SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s", (commitary_id, repo_id, insight_date))
+                cur.execute("""
+                    SELECT 1 FROM insight_item ii
+                    JOIN daily_insight di ON ii.daily_insight_id = di.daily_insight_id
+                    WHERE di.commitary_id = %s
+                    AND di.repo_id = %s
+                    AND di.date = %s
+                    AND ii.branch_name = %s
+                """, (commitary_id, repo_id, insight_date, branch))
                 if cur.fetchone():
-                    print("DEBUG: Insight already exists for this date.")
-                    return 1
+                    current_app.logger.debug("DEBUG: Insight for this branch and date already exists.")
+                    return 1 # Status: Already exists
 
             # Step 1: Get the most recent Monday
             today = insight_date
             monday_date = today - timedelta(days=today.weekday())
             monday_start_datetime = datetime.combine(monday_date, datetime.min.time(), tzinfo=timezone.utc)
+            snapshot_week_id_str = monday_date.isoformat()  # e.g., "2025-09-15"
 
-            # Step 1.5: Check if the snapshot for this Monday already exists in the vector DB
+            # Step 1.5: Check if the snapshot for this Monday already exists using the new ID
             snapshot_exists = False
             with conn.cursor() as cur:
+                # THIS IS THE CORRECTED QUERY for your schema
                 cur.execute(
                     """
-                    SELECT 1 FROM vector_data 
-                    WHERE metadata_repo_id = %s 
-                      AND metadata_target_branch = %s 
-                      AND metadata_lastModifiedTime = %s 
-                      AND metadata_type = 'codebase'
+                    SELECT 1 FROM langchain_pg_embedding
+                    WHERE cmetadata->>'repo_id' = %s
+                    AND cmetadata->>'target_branch' = %s
+                    AND cmetadata->>'snapshot_week_id' = %s
+                    AND cmetadata->>'type' = 'codebase'
                     LIMIT 1
                     """,
-                    (repo_id, branch, monday_start_datetime)
+                    (str(repo_id), branch, snapshot_week_id_str) # Cast repo_id to string for JSONB query
                 )
                 if cur.fetchone():
                     snapshot_exists = True
-                    print(f"DEBUG: Codebase snapshot for {monday_date} already exists in the vector store.")
+                    print(f"DEBUG: Codebase snapshot for week of {snapshot_week_id_str} already exists.")
 
             repo_dto: RepoDTO = gb_service.getSingleRepoByID(user_token, repo_id)
             if not repo_dto:
                 print("ERROR: Repository not found on GitHub.")
                 return 2
-            
+
             if not snapshot_exists:
-                # Step 2: Get Monday's codebase snapshot and embed it
                 print(f"DEBUG: Fetching codebase snapshot for Monday: {monday_start_datetime}")
                 monday_snapshot: Optional[CodebaseDTO] = gb_service.getSnapshotByIdDatetime(user_token, repo_id, branch, monday_start_datetime)
-                
+
                 if monday_snapshot and monday_snapshot.files:
-                    # Corrected line: removed the extra argument
-                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id)
+                    # Pass the new stable ID when storing the snapshot
+                    self._embed_and_store_codebase(monday_snapshot, commitary_id, branch, repo_id, snapshot_week_id_str)
                 else:
                     print("DEBUG: No codebase snapshot found for Monday. Proceeding without RAG context.")
 
 
+
             # Step 3: Get the diff from the start of the week to the target date
             end_of_day = datetime.combine(insight_date, datetime.max.time(), tzinfo=timezone.utc)
-            diff_dto: DiffDTO = gb_service.getDiffByIdTime2(
+            diff_dto: DiffDTO = gb_service.getDiffByIdTime3(
                 user_token=user_token, repo_id=repo_id,
-                branch_from=branch, branch_to=branch,
+                branch=branch,
                 datetime_from=monday_start_datetime, datetime_to=end_of_day
             )
-
+            current_app.logger.debug(f"DEBUG: diff_dto retrieved.")
             # Step 4: Handle no diff
             if not diff_dto or not diff_dto.files:
-                print("DEBUG: No activity found for the specified date.")
+                current_app.logger.debug("DEBUG: No activity found for the specified date.")
                 activity_status = False
                 
                 with conn.cursor() as cur:
+                    # Find or create daily_insight and set its activity to false if it doesn't exist
                     cur.execute(
-                        "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
-                        (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                        "SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s",
+                        (commitary_id, repo_id, insight_date)
                     )
+                    if not cur.fetchone():
+                        cur.execute(
+                            "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s)",
+                            (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                        )
                     conn.commit()
                 return -1 # Status: No activity
             
             activity_status = True
-            
+            retrieved_docs = None
             # Step 5: Retrieve relevant documents from the vector store
-            diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
-            retriever = self.vector_store.as_retriever()
-            retrieved_docs = retriever.invoke(diff_content_for_retrieval)
-            print(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
+            
+            diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])            
+            MAX_RETRIEVAL_QUERY_LENGTH = 100000  # Set a safe character limit for the query
+            if len(diff_content_for_retrieval) > MAX_RETRIEVAL_QUERY_LENGTH:
+                diff_content_for_retrieval = diff_content_for_retrieval[:MAX_RETRIEVAL_QUERY_LENGTH]
+ 
+
+            retriever = self.vector_store.as_retriever(search_kwargs={'k': 2,
+                                                                              'filter': {
+            "$and": [
+                {"commitary_user": commitary_id},
+                {"repo_id": repo_id}
+            ]
+        }})
+            # retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+            
+            
+            
+            try:
+                current_app.logger.debug("Attempting to retrieve documents from vector store...")
+                current_app.logger.debug(f"  - Size of content for retrieval: {len(diff_content_for_retrieval)} characters")
+                
+                retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+
+                current_app.logger.debug(f"Successfully retrieved {len(retrieved_docs)} documents from vector store.")
+            except Exception as e:
+                current_app.logger.error("CRITICAL: Failed during vector store retrieval (retriever.invoke). This is the point of failure.", exc_info=True)
+                # Re-raise the exception or return an error status
+                # For now, let's return the error status to stop the process gracefully
+                return 2 # Status: Error
+            current_app.logger.debug(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
 
             # Step 6: Generate insight with RAG context
             insight_item: InsightItemDTO = rag_service.generate_insight_from_diff(
@@ -210,12 +254,26 @@ class InsightService():
             )
             # Step 7: Save the insight into the database
             with conn.cursor() as cur:
-                # Insert into daily_insight table
+                # Find or create the daily_insight entry for the day
                 cur.execute(
-                    "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
-                    (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                    "SELECT daily_insight_id FROM daily_insight WHERE commitary_id = %s AND repo_id = %s AND date = %s",
+                    (commitary_id, repo_id, insight_date)
                 )
-                daily_insight_id = cur.fetchone()[0]
+                result = cur.fetchone()
+                if result:
+                    daily_insight_id = result[0]
+                    # If activity is true, make sure to update the daily_insight record
+                    cur.execute(
+                        "UPDATE daily_insight SET activity = TRUE WHERE daily_insight_id = %s",
+                        (daily_insight_id,)
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO daily_insight (date, commitary_id, repo_name, repo_id, activity) VALUES (%s, %s, %s, %s, %s) RETURNING daily_insight_id",
+                        (insight_date, commitary_id, repo_dto.github_name, repo_id, activity_status)
+                    )
+                    daily_insight_id = cur.fetchone()[0]
+
 
                 # Insert into insight_item table
                 cur.execute(
@@ -225,14 +283,14 @@ class InsightService():
 
                 conn.commit()
             
-            print("DEBUG: Insight successfully created and saved.")
+            current_app.logger.debug("DEBUG: Insight successfully created and saved.")
             return 0 # Status: Success
 
         except Exception as e:
             conn.rollback()
-            print(f"ERROR: An exception occurred while creating insight: {e}")
+            current_app.logger.debug(f"ERROR: An exception occurred while creating insight: {e}")
             return 2 # Status: Error
-    
+        
     @with_db_connection
     def getInsights(self,commitary_id: int, repo_id: int, start_datetime: datetime, end_datetime: datetime,conn=None) -> DailyInsightListDTO:
         """
@@ -292,7 +350,7 @@ class InsightService():
             return DailyInsightListDTO(insights=list(daily_insights_map.values()))
 
         except Exception as e:
-            print(f"ERROR: An exception occurred while retrieving insights: {e}")
+            current_app.logger.debug(f"ERROR: An exception occurred while retrieving insights: {e}")
             return DailyInsightListDTO(insights=[])
 
 # Singleton instance
