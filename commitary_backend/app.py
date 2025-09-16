@@ -430,12 +430,13 @@ def create_app():
 
     @app.route("/createInsight",methods=['POST'])
     def createInsight():
+        
         user_token = request.args.get('token')
         repo_id = request.args.get('repo_id')
         commitary_id = request.args.get('commitary_id')
         start_date_str = request.args.get('date_from')
         branch = request.args.get('branch')
-
+        print(f"{datetime.now()} /createInsight for {repo_id}, {branch} in {start_date_str}")
         if not all([user_token, repo_id, commitary_id, start_date_str, branch]):
             return jsonify({"error": "Missing one or more required parameters."}), 400
 

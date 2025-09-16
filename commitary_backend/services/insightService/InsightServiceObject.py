@@ -113,7 +113,7 @@ class InsightService():
         try:
             insight_date = start_datetime.date()
             print(f"DEBUG: Processing insight for date: {insight_date}, repo_id: {repo_id}, branch: {branch}")
-
+            
             # Step 0: Check if an insight for this specific branch and date already exists.
             with conn.cursor() as cur:
                 cur.execute("""

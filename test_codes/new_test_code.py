@@ -253,7 +253,7 @@ def test_insight_lifecycle():
 
     # 2. Create insights
     print("\n--- Step 2: Create Insights ---")
-    dates_to_create = ["2025-08-22T12:00:00Z", "2025-08-24T12:00:00Z"]
+    dates_to_create = ["2025-07-30T12:00:00Z", "2025-07-31T12:00:00Z","2025-08-01T12:00:00Z"]
     for date_str in dates_to_create:
         create_params = {
             'token': GITHUB_TOKEN,
@@ -270,8 +270,8 @@ def test_insight_lifecycle():
 
     # 3. Retrieve insights
     print("\n--- Step 3: Retrieve Insights ---")
-    start_date = "2025-08-20T00:00:00Z"
-    end_date = "2025-09-01T23:59:59Z" # Corrected month
+    start_date = "2025-07-25T00:00:00Z"
+    end_date = "2025-08-02T23:59:59Z" # Corrected month
     get_params = {
         'repo_id': TEST_REPO_ID,
         'commitary_id': commitary_id,
@@ -297,10 +297,10 @@ if __name__ == "__main__":
         # test_get_repos()
         # test_get_branches()
         # test_get_diff()
-        test_get_commits()
-        test_get_commits2()
+        # test_get_commits()
+        # test_get_commits2()
         # test_get_diff_invalid_datetime()
         # test_repo_lifecycle()
-        # test_insight_lifecycle()
+        test_insight_lifecycle()
 
         print("\nAll tests finished.")
