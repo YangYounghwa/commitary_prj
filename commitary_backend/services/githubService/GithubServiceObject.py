@@ -32,25 +32,65 @@ class GithubService:
         self.graphql_url = "https://api.github.com/graphql"
 
     def _make_request(self, method, endpoint, token, params=None, json=None):
-        """Helper function to make REST API requests."""
+        """Helper function to make REST API requests with retry logic."""
         headers = {
             "Authorization": f"bearer {token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        response = requests.request(method, f"{self.api_base_url}{endpoint}", headers=headers, params=params, json=json)
-        response.raise_for_status()
-        return response.json()
+        retries = 3
+        backoff_factor = 0.5
+        for i in range(retries):
+            try:
+                # Add a timeout to prevent requests from hanging indefinitely
+                response = requests.request(method, f"{self.api_base_url}{endpoint}", headers=headers, params=params, json=json, timeout=15)
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.RequestException as e:
+                # Check for specific server-side errors that are worth retrying
+                if e.response is not None and e.response.status_code in [502, 503, 504]:
+                    current_app.logger.debug(f"WARN: Received status {e.response.status_code}. Retrying in {backoff_factor * (2 ** i)} seconds...")
+                    sleep(backoff_factor * (2 ** i))
+                    continue
+                # For other errors (like 4xx client errors), raise immediately
+                raise e
+        # If all retries fail, raise the last exception
+        raise Exception(f"Failed to make request to {endpoint} after {retries} retries.")
+
 
     def _execute_graphql(self, query, variables, token):
-        """Helper function to execute a GraphQL query."""
+        """Helper function to execute a GraphQL query with retry logic."""
         headers = {
             "Authorization": f"bearer {token}",
             "Content-Type": "application/json"
         }
         payload = {"query": query, "variables": variables}
-        response = requests.post(self.graphql_url, json=payload, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        retries = 3
+        backoff_factor = 0.5
+        for i in range(retries):
+            try:
+                # Add a timeout to the GraphQL request as well
+                response = requests.post(self.graphql_url, json=payload, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                # Check for GraphQL-level errors, which can still return a 200 OK
+                json_response = response.json()
+                if "errors" in json_response:
+                    current_app.logger.debug(f"ERROR: GraphQL query failed with errors: {json_response['errors']}")
+                    # Decide if you want to retry on certain GraphQL errors. For now, we'll just raise.
+                    raise Exception(f"GraphQL query failed: {json_response['errors']}")
+                
+                return json_response
+            except requests.exceptions.RequestException as e:
+                # Retry on 502, 503, 504 status codes
+                if e.response is not None and e.response.status_code in [502, 503, 504]:
+                    current_app.logger.debug(f"WARN: Received status {e.response.status_code} from GraphQL endpoint. Retrying in {backoff_factor * (2 ** i)} seconds...")
+                    sleep(backoff_factor * (2 ** i))
+                    continue
+                # For other errors, raise immediately
+                raise e
+        # If all retries fail, raise the last exception
+        raise Exception(f"Failed to execute GraphQL query after {retries} retries.")
+
 
     def getUserMetadata(self, user: str, token: str) -> UserGBInfoDTO:
         """
