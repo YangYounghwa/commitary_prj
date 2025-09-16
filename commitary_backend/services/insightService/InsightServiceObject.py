@@ -80,6 +80,7 @@ class InsightService():
         """
         Chunks, embeds, and stores the codebase snapshot in the vector database.
         """
+        current_app.logger.debug(f"embed_and_store_codebase")
         documents = []
         for file in codebase_dto.files:
             chunks = self.text_splitter.split_text(file.code_content)
@@ -100,10 +101,19 @@ class InsightService():
                 documents.append(doc)
         
         if documents:
-            self.vector_store.add_documents(documents)
-            current_app.logger.debug(f"DEBUG: Successfully embedded and stored {len(documents)} document chunks.")
-    
-    
+            current_app.logger.debug(f"Attempting to embed and store {len(documents)} document chunks for codebase snapshot.")
+            
+            # Process documents in batches to avoid timeouts and memory issues.
+            batch_size = 16
+            for i in range(0, len(documents), batch_size):
+                batch = documents[i:i + batch_size]
+                self.vector_store.add_documents(batch)
+                current_app.logger.debug(f"  - Successfully processed batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+
+            current_app.logger.debug(f"Successfully embedded and stored all document chunks.")
+        else:
+            current_app.logger.debug("No documents to embed for this codebase snapshot.")
+            
     
     @with_db_connection
     def createDailyInsight(self,  commitary_id: int, repo_id: int, start_datetime: datetime, branch: str, user_token: str,conn=None) -> int:
