@@ -21,6 +21,7 @@ class RAGService:
         """
         Generates a concise code insight from a DiffDTO, using retrieved documents as context.
         """
+        current_app.logger.debug(f"Generating insight form diff")
         if not diff_dto.files:
             return InsightItemDTO(
                 branch_name=branch_name,
