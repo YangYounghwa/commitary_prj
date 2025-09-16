@@ -110,6 +110,7 @@ class InsightService():
         Creates a daily insight for a specific branch using a RAG system. It fetches a snapshot from the previous Monday,
         embeds it if it doesn't exist, and then uses it as context to analyze the diff for the given day.
         """
+        print(f"{datetime.now()} debug code")
         try:
             insight_date = start_datetime.date()
             print(f"DEBUG: Processing insight for date: {insight_date}, repo_id: {repo_id}, branch: {branch}")

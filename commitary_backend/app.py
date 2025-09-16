@@ -61,6 +61,7 @@ def create_app():
     create_db_pool(app)
     app.teardown_appcontext(close_db_conn)
     CORS(app)
+    print(f"{datetime.now()} app started.")
 
     # --- Configuration and Sanity Check ---
     app.secret_key = os.getenv("FLASK_SECRET_KEY")
