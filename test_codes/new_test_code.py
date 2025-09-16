@@ -294,7 +294,7 @@ if __name__ == "__main__":
     else:
         # Run all the tests
         # test_get_user()
-        test_get_repos()
+        # test_get_repos()
         # test_get_branches()
         # test_get_diff()
         # test_get_commits()

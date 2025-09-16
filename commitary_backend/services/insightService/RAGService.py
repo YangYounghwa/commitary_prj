@@ -29,11 +29,15 @@ class RAGService:
         diff_text = ""
         for file in diff_dto.files:
             diff_text += f"Filename: {file.filename}\nStatus: {file.status}\nPatch:\n{file.patch}\n\n"
-        MAX_DIFF_LENGTH = 6000
+        MAX_DIFF_LENGTH = 4000
+        
+        
         if len(diff_text) > MAX_DIFF_LENGTH:
             diff_text = diff_text[:MAX_DIFF_LENGTH] + "\n\n... (diff truncated due to length)"
         # Format the retrieved documents for the prompt
         context_text = ""
+        
+        
         for doc in retrieved_docs:
             context_text += f"--- Context from {doc.metadata.get('filepath', 'unknown file')} ---\n"
             context_text += doc.page_content
