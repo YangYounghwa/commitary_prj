@@ -65,9 +65,33 @@ class RAGService:
         current_app.logger.debug(f"  - Diff Text Length:    {len(diff_text)} characters")
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert software developer. Analyze the following code changes (diff) and provide a concise, high-level summary of the key insights. Use the provided context from the codebase to better understand the purpose and impact of the changes. Cite classes and filenames if needed. Make list of changes divided with '-' And provide the summary on top. Focus on what was changed and why, not just the lines of code. Return the concise result in Korean"),
-            # Corrected: Use placeholders in the template
-            ("user", "Repository: {repo_name}\nBranch: {branch_name}\n\n### Code Context (from the start of the week):\n{context_text}\n\n### Code Changes (today's diff):\n{diff_text}")
+            ("system", "You are an expert software developer and code reviewer. Your task is to provide a professional analysis of the provided code changes."),
+
+("user", """
+Analyze the following code changes from the repository '{repo_name}' on branch '{branch_name}'.
+Use the provided context to understand the scope and purpose of the modifications.
+
+Present your analysis in the following structure, in Korean:
+
+**1. 변경사항 요약 (Summary of Changes)**
+* Provide a concise, high-level overview of the purpose and impact of these changes.
+
+**2. 주요 변경 내역 (List of Key Changes)**
+* Create a bulleted list of the specific modifications.
+* For each item, cite the relevant filenames, classes, or functions.
+* Briefly explain what was changed and the reason for the change.
+
+**3. 기술적 분석 및 인사이트 (Technical Analysis and Insight)**
+* Provide deeper insights into the changes. Consider architectural implications, potential risks, performance improvements, or adherence to coding best practices. Explain the technical significance of the modifications.
+
+The entire response must be in formal, professional Korean. Do not use any emojis.
+
+### Code Context (from the start of the week):
+{context_text}
+
+### Code Changes (today's diff):
+{diff_text}
+""")
         ])
 
         chain = prompt | self.llm

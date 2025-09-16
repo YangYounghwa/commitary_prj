@@ -253,14 +253,14 @@ def test_insight_lifecycle():
 
     # 2. Create insights
     print("\n--- Step 2: Create Insights ---")
-    dates_to_create = ["2025-08-23T12:00:00Z", "2025-08-24T12:00:00Z"]
+    dates_to_create = ["2025-09-03T12:00:00Z", "2025-09-04T12:00:00Z"]
     for date_str in dates_to_create:
         create_params = {
             'token': GITHUB_TOKEN,
             'repo_id': TEST_REPO_ID,
             'commitary_id': commitary_id,
             'date_from': date_str,
-            'branch': "yh_1"
+            'branch': "yh_3"
         }
         create_response = requests.post(f"{BASE_URL}/createInsight", params=create_params)
         if create_response.status_code not in [201, 409, 200]:
@@ -270,8 +270,8 @@ def test_insight_lifecycle():
 
     # 3. Retrieve insights
     print("\n--- Step 3: Retrieve Insights ---")
-    start_date = "2025-08-20T00:00:00Z"
-    end_date = "2025-08-25T23:59:59Z" # Corrected month
+    start_date = "2025-09-01T00:00:00Z"
+    end_date = "2025-09-05T23:59:59Z" 
     get_params = {
         'repo_id': TEST_REPO_ID,
         'commitary_id': commitary_id,
