@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # IMPORTANT: Set this to the address of your running Flask server
-BASE_URL = "http://3.37.27.11:5000"  # Example: "http://your-remote-server.com"
+BASE_URL = "http://43.200.37.252:5000"  # Example: "http://your-remote-server.com"
 
 # Get the GitHub token from environment variables
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -16,7 +16,7 @@ print(f"Using GitHub Token: {'*' * 10}{GITHUB_TOKEN[-4:]}" if GITHUB_TOKEN else 
 
 
 # Test constants
-TEST_REPO_ID = 1024670234
+TEST_REPO_ID = 1025497696
 TEST_USER = "YangYounghwa"
 
 # --- Helper Functions ---
@@ -253,14 +253,14 @@ def test_insight_lifecycle():
 
     # 2. Create insights
     print("\n--- Step 2: Create Insights ---")
-    dates_to_create = ["2025-07-30T12:00:00Z", "2025-07-31T12:00:00Z","2025-08-01T12:00:00Z"]
+    dates_to_create = ["2025-08-23T12:00:00Z", "2025-08-24T12:00:00Z"]
     for date_str in dates_to_create:
         create_params = {
             'token': GITHUB_TOKEN,
             'repo_id': TEST_REPO_ID,
             'commitary_id': commitary_id,
             'date_from': date_str,
-            'branch': "main"
+            'branch': "yh_1"
         }
         create_response = requests.post(f"{BASE_URL}/createInsight", params=create_params)
         if create_response.status_code not in [201, 409, 200]:
@@ -270,8 +270,8 @@ def test_insight_lifecycle():
 
     # 3. Retrieve insights
     print("\n--- Step 3: Retrieve Insights ---")
-    start_date = "2025-07-25T00:00:00Z"
-    end_date = "2025-08-02T23:59:59Z" # Corrected month
+    start_date = "2025-08-20T00:00:00Z"
+    end_date = "2025-08-25T23:59:59Z" # Corrected month
     get_params = {
         'repo_id': TEST_REPO_ID,
         'commitary_id': commitary_id,
