@@ -219,7 +219,13 @@ class InsightService():
                 diff_content_for_retrieval = diff_content_for_retrieval[:MAX_RETRIEVAL_QUERY_LENGTH]
  
 
-            retriever = self.vector_store.as_retriever(search_kwargs={'k': 2})
+            retriever = self.vector_store.as_retriever(search_kwargs={'k': 2,
+                                                                              'filter': {
+            "$and": [
+                {"commitary_user": commitary_id},
+                {"repo_id": repo_id}
+            ]
+        }})
             # retrieved_docs = retriever.invoke(diff_content_for_retrieval)
             
             
