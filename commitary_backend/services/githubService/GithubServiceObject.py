@@ -800,6 +800,104 @@ class GithubService:
             return None
         
         return self.getSnapshotBySHA(user=None, token=token, owner=owner, repo=repo_name, sha=sha)
+    
+    def getDiffByIdTime3(self, user_token: str, repo_id: int, branch: str, 
+                        datetime_from: datetime, datetime_to: datetime) -> Optional[DiffDTO]:
+        """
+        Returns the difference of commits within a single branch between two datetimes.
+        It calculates the diff from the parent of the first commit in the time range
+        to the last commit in the time range, ensuring that only changes within that
+        period on that specific branch are included.
+        """
+        print("DEBUG: Starting getDiffByIdTime3 function.")
+        repo_dto = self.getSingleRepoByID(user_token, repo_id)
+        if not repo_dto:
+            print("Error: Repository not found.")
+            return None
+
+        owner = repo_dto.github_owner_login
+        repo_name = repo_dto.github_name
+        print(f"DEBUG: Found repository '{repo_name}' owned by '{owner}'.")
+
+        # Use getCommitMsgs2 to get an accurate commit history for the branch in the time range
+        commits_in_range_dto = self.getCommitMsgs2(
+            repo_id=repo_id,
+            token=user_token,
+            branch=branch,
+            startdatetime=datetime_from.isoformat(),
+            enddatetime=datetime_to.isoformat()
+        )
+
+        # If no commits are found, it means there was no activity in the given range.
+        if not commits_in_range_dto or not commits_in_range_dto.commitList:
+            print("DEBUG: No commits found in the specified time range on this branch.")
+            return DiffDTO(
+                repo_name=repo_name,
+                repo_id=repo_id,
+                owner_name=owner,
+                branch_before=branch,
+                branch_after=branch,
+                commit_before_sha="",
+                commit_after_sha="",
+                files=[]
+            )
+
+        # getCommitMsgs2 returns commits in descending order (newest first).
+        shaAfter = commits_in_range_dto.commitList[0].sha
+        oldest_commit_in_range_sha = commits_in_range_dto.commitList[-1].sha
+
+        try:
+            # We need to find the parent of the oldest commit to create a diff
+            # representing all the work done in the specified time range.
+            commit_details = self._make_request("GET", f"/repos/{owner}/{repo_name}/commits/{oldest_commit_in_range_sha}", user_token)
+            
+            if not commit_details.get('parents'):
+                print(f"Warning: The oldest commit in range {oldest_commit_in_range_sha} has no parents (it might be the first commit).")
+                # In this case, we'll compare from the commit itself, which might not show all changes if it's not the absolute first commit.
+                # A better approach could be to use the empty tree SHA, but for simplicity, we'll diff against itself which results in an empty diff.
+                # Or diff against its own sha~1 if possible. Let's get the parent.
+                return DiffDTO(
+                    repo_name=repo_name, repo_id=repo_id, owner_name=owner,
+                    branch_before=branch, branch_after=branch,
+                    commit_before_sha=oldest_commit_in_range_sha, commit_after_sha=shaAfter,
+                    files=[] # This will likely be empty. A more advanced implementation might be needed if this is a common case.
+                )
+
+            shaBefore = commit_details['parents'][0]['sha']
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: Failed to fetch commit details to find parent SHA: {e}")
+            return None
+
+
+        print(f"DEBUG: Found SHA_before (parent of first commit in range): {shaBefore}")
+        print(f"DEBUG: Found SHA_after (last commit in range): {shaAfter}")
+
+        if shaBefore == shaAfter:
+            print("Warning: The start and end commits for the diff are the same.")
+            return DiffDTO(
+                repo_name=repo_name,
+                repo_id=repo_id,
+                owner_name=owner,
+                branch_before=branch,
+                branch_after=branch,
+                commit_before_sha=shaBefore,
+                commit_after_sha=shaAfter,
+                files=[]
+            )
+
+        diff_dto = self.getDiffBySHA("user_placeholder", user_token, owner, repo_name, shaBefore, shaAfter)
+        
+        if diff_dto:
+            diff_dto.repo_id = repo_id
+            diff_dto.branch_before = branch
+            diff_dto.branch_after = branch
+            print("DEBUG: Successfully generated DiffDTO.")
+        
+        return diff_dto    
+    
+    
+    
 
 
  

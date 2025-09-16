@@ -177,9 +177,9 @@ class InsightService():
 
             # Step 3: Get the diff from the start of the week to the target date
             end_of_day = datetime.combine(insight_date, datetime.max.time(), tzinfo=timezone.utc)
-            diff_dto: DiffDTO = gb_service.getDiffByIdTime2(
+            diff_dto: DiffDTO = gb_service.getDiffByIdTime3(
                 user_token=user_token, repo_id=repo_id,
-                branch_from=branch, branch_to=branch,
+                branch=branch,
                 datetime_from=monday_start_datetime, datetime_to=end_of_day
             )
 
