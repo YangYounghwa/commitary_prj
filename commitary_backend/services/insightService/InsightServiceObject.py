@@ -199,7 +199,7 @@ class InsightService():
             
             # Step 5: Retrieve relevant documents from the vector store
             diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
-            retriever = self.vector_store.as_retriever()
+            retriever = self.vector_store.as_retriever(search_kwargs={'k': 2})
             retrieved_docs = retriever.invoke(diff_content_for_retrieval)
             print(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
 
