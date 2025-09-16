@@ -189,7 +189,7 @@ class InsightService():
                 branch=branch,
                 datetime_from=monday_start_datetime, datetime_to=end_of_day
             )
-
+            current_app.logger.debug(f"DEBUG: diff_dto retrieved.")
             # Step 4: Handle no diff
             if not diff_dto or not diff_dto.files:
                 current_app.logger.debug("DEBUG: No activity found for the specified date.")
@@ -210,11 +210,26 @@ class InsightService():
                 return -1 # Status: No activity
             
             activity_status = True
-            
+            retrieved_docs = None
             # Step 5: Retrieve relevant documents from the vector store
             diff_content_for_retrieval = " ".join([f.patch for f in diff_dto.files if f.patch])
             retriever = self.vector_store.as_retriever(search_kwargs={'k': 2})
-            retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+            # retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+            
+            
+            
+            try:
+                current_app.logger.debug("Attempting to retrieve documents from vector store...")
+                current_app.logger.debug(f"  - Size of content for retrieval: {len(diff_content_for_retrieval)} characters")
+                
+                retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+
+                current_app.logger.debug(f"Successfully retrieved {len(retrieved_docs)} documents from vector store.")
+            except Exception as e:
+                current_app.logger.error("CRITICAL: Failed during vector store retrieval (retriever.invoke). This is the point of failure.", exc_info=True)
+                # Re-raise the exception or return an error status
+                # For now, let's return the error status to stop the process gracefully
+                return 2 # Status: Error
             current_app.logger.debug(f"DEBUG: Retrieved {len(retrieved_docs)} documents for context.")
 
             # Step 6: Generate insight with RAG context
