@@ -63,31 +63,31 @@ load_dotenv()
 class LoggingOpenAIEmbeddings(OpenAIEmbeddings):
     """
     A custom OpenAIEmbeddings class that logs the number of tokens used.
+    It accepts a logger instance to avoid context issues.
     """
+    def __init__(self, logger: logging.Logger, **kwargs):
+        super().__init__(**kwargs)
+        self.logger = logger # Store the passed-in logger
+
     def _get_token_count(self, texts: List[str]) -> int:
         """Helper function to count tokens using tiktoken."""
-        # Note: The model name might need to be adjusted based on the specific
-        # embedding model you're using (e.g., "text-embedding-ada-002").
-        # "cl100k_base" is the encoding for text-embedding-ada-002.
         encoding = tiktoken.get_encoding("cl100k_base")
-        
-        total_tokens = 0
-        for text in texts:
-            total_tokens += len(encoding.encode(text))
+        total_tokens = sum(len(encoding.encode(text)) for text in texts)
         return total_tokens
 
     def embed_documents(self, texts: List[str], chunk_size: Optional[int] = 0) -> List[List[float]]:
         """Override embed_documents to add logging."""
         token_count = self._get_token_count(texts)
-        current_app.logger.debug(f"Embedding {len(texts)} documents. Token count (estimated): {token_count}")
+        # Use the stored logger instance
+        self.logger.debug(f"Embedding {len(texts)} documents. Token count (estimated): {token_count}")
         return super().embed_documents(texts, chunk_size)
 
     def embed_query(self, text: str) -> List[float]:
         """Override embed_query to add logging."""
         token_count = self._get_token_count([text])
-        current_app.logger.debug(f"Embedding a single query. Token count (estimated): {token_count}")
+        # Use the stored logger instance
+        self.logger.debug(f"Embedding a single query. Token count (estimated): {token_count}")
         return super().embed_query(text)
-
 class InsightService():
     
     def __init__(self):
