@@ -91,7 +91,7 @@ class LoggingOpenAIEmbeddings(OpenAIEmbeddings):
 class InsightService():
     
     def __init__(self):
-        self.embeddings = LoggingOpenAIEmbeddings()
+        self.embeddings = LoggingOpenAIEmbeddings(logger=current_app.logger)
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=150,
