@@ -12,7 +12,7 @@ from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, Commit
 from datetime import date, datetime, timedelta, timezone
 
 from langchain.callbacks import get_openai_callback
-from flask import current_app
+from flask import Flask, current_app
 import logging
 
 
@@ -88,22 +88,37 @@ class LoggingOpenAIEmbeddings(OpenAIEmbeddings):
         # Use the stored logger instance
         self.logger.debug(f"Embedding a single query. Token count (estimated): {token_count}")
         return super().embed_query(text)
+    
+    
+    
+    
 class InsightService():
     
+    # --- START: MODIFIED __init__ and added init_app ---
     def __init__(self):
-        self.embeddings = LoggingOpenAIEmbeddings(logger=current_app.logger)
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=150,
-            length_function=len
-        )
+        # Initialize attributes to None. They will be set by init_app.
+        self.embeddings = None
+        self.text_splitter = None
+        self.connection_string = None
+        self.vector_store = None
+
+    def init_app(self, app: Flask):
+        """Initializes the service with the Flask app context."""
+        with app.app_context():
+            self.embeddings = LoggingOpenAIEmbeddings(logger=app.logger)
+            self.text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                length_function=len
+            )
+            self.connection_string = os.getenv("DATABASE_URL")
+            self.vector_store = PGVector(
+                connection=self.connection_string,
+                embeddings=self.embeddings,
+                collection_name="codebase_snapshots"
+            )
         # Assuming DATABASE_URL is in the environment for PGVector
-        self.connection_string = os.getenv("DATABASE_URL")
-        self.vector_store = PGVector(
-    connection=self.connection_string,
-    embeddings=self.embeddings,
-    collection_name="codebase_snapshots"
-)
+
     def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int,snapshot_week_id:str):
         """
         Chunks, embeds, and stores the codebase snapshot in the vector database.

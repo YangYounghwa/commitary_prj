@@ -74,7 +74,7 @@ def create_app():
     create_db_pool(app)
     app.teardown_appcontext(close_db_conn)
     CORS(app)
-    
+    insight_service.init_app(app)
     
     
     app.logger.debug(f"{datetime.now()} app started.")
