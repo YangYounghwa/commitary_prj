@@ -3,6 +3,7 @@ from typing import List, Optional
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
+import tiktoken
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
 from commitary_backend.services.insightService.RAGService import rag_service
 from commitary_backend.dto.insightDTO import DailyInsightDTO, DailyInsightListDTO, InsightItemDTO
@@ -10,7 +11,7 @@ from commitary_backend.dto.gitServiceDTO import CodebaseDTO, CodeFileDTO, Commit
 
 from datetime import date, datetime, timedelta, timezone
 
-
+from langchain.callbacks import get_openai_callback
 from flask import current_app
 import logging
 
@@ -59,14 +60,41 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+class LoggingOpenAIEmbeddings(OpenAIEmbeddings):
+    """
+    A custom OpenAIEmbeddings class that logs the number of tokens used.
+    """
+    def _get_token_count(self, texts: List[str]) -> int:
+        """Helper function to count tokens using tiktoken."""
+        # Note: The model name might need to be adjusted based on the specific
+        # embedding model you're using (e.g., "text-embedding-ada-002").
+        # "cl100k_base" is the encoding for text-embedding-ada-002.
+        encoding = tiktoken.get_encoding("cl100k_base")
+        
+        total_tokens = 0
+        for text in texts:
+            total_tokens += len(encoding.encode(text))
+        return total_tokens
+
+    def embed_documents(self, texts: List[str], chunk_size: Optional[int] = 0) -> List[List[float]]:
+        """Override embed_documents to add logging."""
+        token_count = self._get_token_count(texts)
+        current_app.logger.debug(f"Embedding {len(texts)} documents. Token count (estimated): {token_count}")
+        return super().embed_documents(texts, chunk_size)
+
+    def embed_query(self, text: str) -> List[float]:
+        """Override embed_query to add logging."""
+        token_count = self._get_token_count([text])
+        current_app.logger.debug(f"Embedding a single query. Token count (estimated): {token_count}")
+        return super().embed_query(text)
 
 class InsightService():
     
     def __init__(self):
-        self.embeddings = OpenAIEmbeddings()
+        self.embeddings = LoggingOpenAIEmbeddings()
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
-            chunk_overlap=200,
+            chunk_overlap=150,
             length_function=len
         )
         # Assuming DATABASE_URL is in the environment for PGVector
@@ -106,10 +134,12 @@ class InsightService():
             
             # Process documents in batches to avoid timeouts and memory issues.
             batch_size = 16
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i:i + batch_size]
-                self.vector_store.add_documents(batch)
-                current_app.logger.debug(f"  - Successfully processed batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+            with get_openai_callback() as cb:
+                for i in range(0, len(documents), batch_size):
+                    batch = documents[i:i + batch_size]
+                    self.vector_store.add_documents(batch)
+                    current_app.logger.debug(f"  - Successfully processed batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+                current_app.logger.debug(f"OpenAI Token Usage for Embedding: {cb}")
 
             current_app.logger.debug(f"Successfully embedded and stored all document chunks.")
         else:
@@ -223,24 +253,26 @@ class InsightService():
                 diff_content_for_retrieval = diff_content_for_retrieval[:MAX_RETRIEVAL_QUERY_LENGTH]
  
 
-            retriever = self.vector_store.as_retriever(search_kwargs={'k': 2,
+            retriever = self.vector_store.as_retriever(search_kwargs={'k': 3,
                                                                               'filter': {
             "$and": [
                 {"commitary_user": commitary_id},
                 {"repo_id": repo_id}
             ]
         }})
-            # retrieved_docs = retriever.invoke(diff_content_for_retrieval)
-            
-            
             
             try:
                 current_app.logger.debug("Attempting to retrieve documents from vector store...")
                 current_app.logger.debug(f"  - Size of content for retrieval: {len(diff_content_for_retrieval)} characters")
                 
-                retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+                # ADD THIS with BLOCK and the log line
+                with get_openai_callback() as cb:
+                    retrieved_docs = retriever.invoke(diff_content_for_retrieval)
+                    current_app.logger.debug(f"OpenAI Token Usage for Retrieval Query Embedding: {cb}")
+
 
                 current_app.logger.debug(f"Successfully retrieved {len(retrieved_docs)} documents from vector store.")
+
             except Exception as e:
                 current_app.logger.error("CRITICAL: Failed during vector store retrieval (retriever.invoke). This is the point of failure.", exc_info=True)
                 # Re-raise the exception or return an error status

@@ -9,6 +9,8 @@ from commitary_backend.dto.insightDTO import InsightItemDTO
 from dotenv import load_dotenv
 import logging
 
+from langchain.callbacks import get_openai_callback
+
 
 load_dotenv() # Loads env from .env
 
@@ -29,16 +31,12 @@ class RAGService:
             )
 
         # Combine all file patches into a single string
-        
-        
-        
-        MAX_PATCH_LENGTH_PER_FILE = 1500  # Adjust this value as needed
+        MAX_PATCH_LENGTH_PER_FILE = 2000  # Adjust this value as needed
 
         diff_text = ""
         for file in diff_dto.files:
             patch_content = file.patch if file.patch else ""
             
-            # Check if the patch content exceeds the per-file limit
             if len(patch_content) > MAX_PATCH_LENGTH_PER_FILE:
                 patch_content = patch_content[:MAX_PATCH_LENGTH_PER_FILE] + "\n... (patch truncated)"
 
@@ -48,7 +46,7 @@ class RAGService:
             
             
             
-        MAX_DIFF_LENGTH = 7000
+        MAX_DIFF_LENGTH = 8000
         
         
         if len(diff_text) > MAX_DIFF_LENGTH:
@@ -67,19 +65,46 @@ class RAGService:
         current_app.logger.debug(f"  - Diff Text Length:    {len(diff_text)} characters")
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert software developer. Analyze the following code changes (diff) and provide a concise, high-level summary of the key insights. Use the provided context from the codebase to better understand the purpose and impact of the changes. Cite classes and filenames if needed. Make list of changes divided with '-' And provide the summary on top. Focus on what was changed and why, not just the lines of code. Return the concise result in Korean"),
-            # Corrected: Use placeholders in the template
-            ("user", "Repository: {repo_name}\nBranch: {branch_name}\n\n### Code Context (from the start of the week):\n{context_text}\n\n### Code Changes (today's diff):\n{diff_text}")
+            ("system", "You are an expert software developer. Your task is to provide a professional analysis of the provided code changes."),
+
+("user", """
+Analyze the following code changes from the repository '{repo_name}' on branch '{branch_name}'.
+Use the provided context to understand the scope and purpose of the modifications.
+
+Present your analysis in the following structure, in Korean:
+
+**1. 변경사항 요약 (Summary of Changes)**
+* Provide a concise, high-level overview of the purpose and impact of these changes.
+
+**2. 주요 변경 내역 (List of Key Changes)**
+* Create a bulleted list of the specific modifications.
+* Cite the relevant filenames, classes, or functions for import changes.
+* Briefly explain what was changed.
+
+**3. 기술적 분석 및 인사이트 (Technical Analysis and Insight)**
+* Provide deeper insights into the changes. Consider architectural implications, potential risks, performance improvements, or adherence to coding best practices.
+
+The entire response must be in formal, professional Korean. no emojis.
+
+### Code Context (from the start of the week):
+{context_text}
+
+### Code Changes (today's diff):
+{diff_text}
+""")
         ])
 
         chain = prompt | self.llm
         # Corrected: Pass the actual values to the invoke method
-        response = chain.invoke({
+        response = None 
+        with get_openai_callback() as cb:
+            response = chain.invoke({
             "repo_name": repo_name,
             "branch_name": branch_name,
             "context_text": context_text,
             "diff_text": diff_text
-        })
+            })
+            current_app.logger.debug(f"OpenAI Token Usage for Insight Generation : {cb}")
 
         return InsightItemDTO(
             branch_name=branch_name,
