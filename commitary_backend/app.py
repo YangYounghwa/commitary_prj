@@ -61,10 +61,22 @@ def create_app():
     """
     
     app = Flask(__name__)
+    from flask.logging import default_handler
+    
+    # Logging added
+    app.logger.removeHandler(default_handler)
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    app.logger.addHandler(handler)
     app.logger.setLevel(logging.DEBUG)
+    # app.logger.setLevel(logging.DEBUG)
     create_db_pool(app)
     app.teardown_appcontext(close_db_conn)
     CORS(app)
+    
+    
+    
     app.logger.debug(f"{datetime.now()} app started.")
 
     # --- Configuration and Sanity Check ---
