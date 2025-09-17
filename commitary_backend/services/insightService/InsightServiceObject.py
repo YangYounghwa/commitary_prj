@@ -3,6 +3,7 @@ from typing import List, Optional
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
+from pydantic import Field
 import tiktoken
 from commitary_backend.services.githubService.GithubServiceObject import gb_service
 from commitary_backend.services.insightService.RAGService import rag_service
@@ -59,42 +60,38 @@ CREATE TABLE IF NOT EXISTS "insight_item" (
 from dotenv import load_dotenv
 load_dotenv()
 
-
-class LoggingOpenAIEmbeddings(OpenAIEmbeddings):
+class LoggingOpenAIEmbeddings(Embeddings):
     """
-    A custom OpenAIEmbeddings class that logs the number of tokens used.
-    It accepts a logger instance to avoid context issues.
+    A wrapper class that adds token logging to an OpenAIEmbeddings instance.
+    This uses composition to avoid Pydantic validation errors.
     """
-    def __init__(self, logger: logging.Logger, **kwargs):
-        super().__init__(**kwargs)
-        self.logger = logger # Store the passed-in logger
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+        # Create and hold an instance of the actual embeddings model
+        self.embedding_model = OpenAIEmbeddings()
 
     def _get_token_count(self, texts: List[str]) -> int:
         """Helper function to count tokens using tiktoken."""
         encoding = tiktoken.get_encoding("cl100k_base")
-        total_tokens = sum(len(encoding.encode(text)) for text in texts)
-        return total_tokens
+        return sum(len(encoding.encode(text)) for text in texts)
 
-    def embed_documents(self, texts: List[str], chunk_size: Optional[int] = 0) -> List[List[float]]:
-        """Override embed_documents to add logging."""
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Log token count and then delegate to the actual model."""
         token_count = self._get_token_count(texts)
-        # Use the stored logger instance
         self.logger.debug(f"Embedding {len(texts)} documents. Token count (estimated): {token_count}")
-        return super().embed_documents(texts, chunk_size)
+        # Call the method on the contained instance
+        return self.embedding_model.embed_documents(texts)
 
     def embed_query(self, text: str) -> List[float]:
-        """Override embed_query to add logging."""
+        """Log token count and then delegate to the actual model."""
         token_count = self._get_token_count([text])
-        # Use the stored logger instance
         self.logger.debug(f"Embedding a single query. Token count (estimated): {token_count}")
-        return super().embed_query(text)
-    
-    
-    
-    
+        # Call the method on the contained instance
+        return self.embedding_model.embed_query(text)
+
+
 class InsightService():
     
-    # --- START: MODIFIED __init__ and added init_app ---
     def __init__(self):
         # Initialize attributes to None. They will be set by init_app.
         self.embeddings = None
@@ -105,6 +102,7 @@ class InsightService():
     def init_app(self, app: Flask):
         """Initializes the service with the Flask app context."""
         with app.app_context():
+            # The instantiation now uses our new wrapper class
             self.embeddings = LoggingOpenAIEmbeddings(logger=app.logger)
             self.text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=1000,
@@ -117,7 +115,6 @@ class InsightService():
                 embeddings=self.embeddings,
                 collection_name="codebase_snapshots"
             )
-        # Assuming DATABASE_URL is in the environment for PGVector
 
     def _embed_and_store_codebase(self, codebase_dto: CodebaseDTO, commitary_id: int, branch: str, repo_id: int,snapshot_week_id:str):
         """
