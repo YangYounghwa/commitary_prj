@@ -72,20 +72,20 @@ commitary_prj/
     프로젝트 root에 `.env`파일을 생성
     ```
     # Flask
-FLASK_APP=commitary_backend.app
-FLASK_RUN_HOST=0.0.0.0
-FLASK_SECRET_KEY='your-very-secret-key'
-
-# Database (PostgreSQL with PGVector)
-DATABASE_URL='postgresql://USER:PASSWORD@HOST:PORT/DATABASE'
-
-# GitHub API
-GITHUB_CLIENT_ID='your-github-client-id'
-GITHUB_CLIENT_SECRET='your-github-client-secret'
-
-# OpenAI API
-OPENAI_API_KEY='your-openai-api-key'
-OPENAI_DEFAULT_MODEL='gpt-4o' # 또는 원하는 모델
+    FLASK_APP=commitary_backend.app
+    FLASK_RUN_HOST=0.0.0.0
+    FLASK_SECRET_KEY='your-very-secret-key'
+    
+    # Database (PostgreSQL with PGVector)
+    DATABASE_URL='postgresql://USER:PASSWORD@HOST:PORT/DATABASE'
+    
+    # GitHub API
+    GITHUB_CLIENT_ID='your-github-client-id'
+    GITHUB_CLIENT_SECRET='your-github-client-secret'
+    
+    # OpenAI API
+    OPENAI_API_KEY='your-openai-api-key'
+    OPENAI_DEFAULT_MODEL='gpt-4o' # 또는 원하는 모델
     ```
 - 어플리케이션 실행
   ```Bash
