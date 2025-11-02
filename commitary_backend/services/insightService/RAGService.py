@@ -64,33 +64,54 @@ class RAGService:
         current_app.logger.debug(f"  - Context Text Length: {len(context_text)} characters")
         current_app.logger.debug(f"  - Diff Text Length:    {len(diff_text)} characters")
         
+        # Few-Shot 예제와 Chain-of-Thought 추가
+        # 개선된 프롬프트 - 간결하고 효과적
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert software developer. Your task is to provide a professional analysis of the provided code changes."),
+            ("system", """You are an expert software developer. Provide professional, insightful code change analysis with clear technical reasoning."""),
 
-("user", """
-Analyze the following code changes from the repository '{repo_name}' on branch '{branch_name}'.
-Use the provided context to understand the scope and purpose of the modifications.
+            ("user", """
+# Example Analysis
 
-Present your analysis in the following structure, in Korean:
+Input: Password hashing changed from SHA256 to bcrypt
 
-**1. 변경사항 요약 (Summary of Changes)**
-* Provide a concise, high-level overview of the purpose and impact of these changes.
+**1. 변경사항 요약**
+보안 강화를 위해 비밀번호 해싱 알고리즘을 SHA-256에서 bcrypt로 업그레이드했습니다.
 
-**2. 주요 변경 내역 (List of Key Changes)**
-* Create a bulleted list of the specific modifications.
-* Cite the relevant filenames, classes, or functions for import changes.
-* Briefly explain what was changed.
+**2. 주요 변경 내역**
+- auth/password.py: hashlib.sha256()를 bcrypt.hashpw()로 교체
+- Salt 자동 생성 로직 추가
 
-**3. 기술적 분석 및 인사이트 (Technical Analysis and Insight)**
-* Provide deeper insights into the changes. Consider architectural implications, potential risks, performance improvements, or adherence to coding best practices.
+**3. 기술적 분석 및 인사이트**
+bcrypt는 adaptive hashing을 지원하여 브루트포스 공격 방어력이 높습니다. 기존 사용자 비밀번호 마이그레이션 전략이 필요하며, 해싱 시간 증가로 인한 성능 모니터링이 권장됩니다.
 
-The entire response must be in formal, professional Korean. no emojis.
+---
 
-### Code Context (from the start of the week):
+# Analyze These Changes
+
+Repository: {repo_name} | Branch: {branch_name}
+
+## Code Context (weekly snapshot):
 {context_text}
 
-### Code Changes (today's diff):
+## Today's Changes:
 {diff_text}
+
+---
+
+# Output Format (Korean)
+
+**1. 변경사항 요약 (Summary of Changes)**
+* High-level overview of purpose and impact
+
+**2. 주요 변경 내역 (List of Key Changes)**
+* Bulleted list: "파일명: 변경 내용"
+* Include specific classes/functions modified
+
+**3. 기술적 분석 및 인사이트 (Technical Analysis and Insight)**
+* Architecture, performance, security impacts
+* Potential risks and recommendations
+
+**Requirements:** Professional Korean, no emojis, actionable insights
 """)
         ])
 

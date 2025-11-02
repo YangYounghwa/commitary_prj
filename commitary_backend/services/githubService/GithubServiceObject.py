@@ -493,10 +493,11 @@ class GithubService:
             commit_after_sha=diff_data['merge_base_commit']['sha'],
             files=files
         )
-
+#25.10.29 수정
     def _fetch_codebase_snapshot(self, owner: str, repo_name: str, token: str, expression: str) -> CodebaseDTO:
         """
         Internal helper to retrieve a codebase snapshot using GraphQL based on an expression (branch or SHA).
+        Filters out non-code files (media, docs, config files, etc.)
         """
         TREE_QUERY = """
         query GetRepositoryTree($owner: String!, $name: String!, $expression: String!) {
@@ -522,18 +523,63 @@ class GithubService:
         variables = {"owner": owner, "name": repo_name, "expression": expression}
         tree_data = self._execute_graphql(TREE_QUERY, variables, token)
         
+        # 제외할 파일 확장자 정의
+        EXCLUDED_EXTENSIONS = {
+            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico', '.webp',
+            '.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv',
+            '.mp3', '.wav', '.ogg', '.flac',
+            '.md', '.txt', '.rst', '.pdf', '.doc', '.docx',
+            '.json', '.xml', '.yaml', '.yml', '.toml', '.ini', '.env',
+            '.lock', '.sum', '.mod',
+            '.zip', '.tar', '.gz', '.rar', '.7z',
+            '.jar', '.war', '.ear',
+            '.gitignore', '.gitattributes', '.editorconfig',
+            '.log', '.cache', '.tmp',
+        }
+        
+        # 제외할 디렉토리 패턴
+        EXCLUDED_DIRS = {
+            'node_modules', '__pycache__', '.git', '.github',
+            'dist', 'build', 'target', 'out', 'bin',
+            '.vscode', '.idea', '.vs',
+            'venv', 'env', '.env',
+            'coverage', '.pytest_cache', '.mypy_cache',
+        }
+        
+        def should_include_file(path: str, filename: str) -> bool:
+            """파일을 포함할지 결정"""
+            path_parts = path.split('/')
+            if any(excluded_dir in path_parts for excluded_dir in EXCLUDED_DIRS):
+                return False
+            
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in EXCLUDED_EXTENSIONS:
+                return False
+            
+            if not ext and filename.lower() in ['license', 'readme', 'changelog', 'dockerfile', 'makefile']:
+                return False
+            
+            return True
+        
         parsed_files = []
         entries = tree_data.get('data', {}).get('repository', {}).get('object', {}).get('entries', [])
-
+        
+        skipped_count = 0
         for entry in entries:
             if entry['type'] == 'blob' and entry['object'] and entry['object'].get('text') is not None:
+                if not should_include_file(entry['path'], entry['name']):
+                    skipped_count += 1
+                    current_app.logger.debug(f"Skipping file: {entry['path']}")
+                    continue
+                
                 parsed_files.append(CodeFileDTO(
                     filename=entry['name'],
                     path=entry['path'],
                     code_content=entry['object']['text'],
                     last_modified_at=datetime.now() 
                 ))
-
+        
+        current_app.logger.debug(f"Parsed {len(parsed_files)} code files, skipped {skipped_count} non-code files")
         return CodebaseDTO(repository_name=f"{owner}/{repo_name}", files=parsed_files)
 
     def getSnapshotByTime(self, user: str, token: str, owner: str, repo: str, branch: str, time: datetime) -> CodebaseDTO:
@@ -949,7 +995,7 @@ class GithubService:
         return diff_dto    
     
     
-    
+
 
 
  

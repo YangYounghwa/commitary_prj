@@ -12,8 +12,8 @@ from commitary_backend.database import create_db_pool
 load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "YOUR_PERSONAL_ACCESS_TOKEN")
 
-TEST_REPO_ID = 1025497696
-TEST_USER = "YangYounghwa"
+TEST_REPO_ID = 1046687705
+TEST_USER = "HarimBaekk"
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def client(app_run):
 def test_get_repos_success(client):
 
     # Make the request using the test client
-    response = client.get("/repos", query_string={'user': 'YangYounghwa', 'token': GITHUB_TOKEN})
+    response = client.get("/repos", query_string={'user': 'HarimBaekk', 'token': GITHUB_TOKEN})
     assert response.status_code == 200
     json_data = response.json
     
@@ -94,8 +94,8 @@ def test_get_diff_success(client):
     query_params = {
         'token': GITHUB_TOKEN,
         'repo_id': TEST_REPO_ID,
-        'branch_from': 'yh_1',
-        'branch_to': 'yh_1',
+        'branch_from': 'main',
+        'branch_to': 'main',
         'datetime_from': dt_from_str,
         'datetime_to': dt_to_str,
         'default_branch': 'main'
